@@ -1,0 +1,19 @@
+[
+    {
+        "name":"snake",
+        "min_hp": 1,
+        "max_hp": 5,
+        "min_strength": 1,
+        "max_strength": 3,
+        "mobile": true
+    },
+    {
+        "name":"shadow",
+        "min_hp": 10,
+        "max_hp": 25,
+        "min_strength": 1,
+        "max_strength": 2,
+        "mobile": false
+    }
+
+]
