@@ -45,6 +45,10 @@ impl Player {
         .join("\t")
     }
 
+    fn move_to(&mut self, coord: (usize, usize)) {
+        self.coord = coord;
+    }
+
     fn fight(&mut self, monster: &Monster) {
         todo!()
     }

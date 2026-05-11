@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.102"
 crossterm = "0.29.0"
+itertools = "0.14.0"
 rand = "0.10.1"
 ratatui = "0.30.0"
 serde = { version = "1.0.228", features = ["serde_derive"] }

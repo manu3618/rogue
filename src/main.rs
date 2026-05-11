@@ -14,9 +14,11 @@ use ratatui::{
     text::{Line, Text},
     widgets::{Block, Paragraph, Widget},
 };
+use std::cell::RefCell;
 use std::fs::File;
 use std::io;
 use std::io::BufReader;
+use std::rc::Rc;
 
 mod map;
 mod player;
@@ -32,7 +34,7 @@ enum Display {
 
 #[derive(Debug, Default, Clone)]
 struct App {
-    // player: Player,
+    player: Rc<RefCell<Player>>,
     // monsters: Vec<Monster>,
     map: map::Map,
     display: Display,
@@ -60,6 +62,15 @@ impl Widget for App {
 }
 
 impl App {
+    fn new() -> Self {
+        let player = Rc::new(RefCell::new(Default::default()));
+        Self {
+            map: map::Map::new(0, Rc::clone(&player)),
+            player: Rc::clone(&player),
+            ..Default::default()
+        }
+    }
+
     fn handle_events(&mut self) -> io::Result<()> {
         match event::read()? {
             // it's important to check that the event is a key press event as
@@ -75,10 +86,10 @@ impl App {
     fn handle_key_event(&mut self, key_event: KeyEvent) -> io::Result<()> {
         match key_event.code {
             KeyCode::Char(u) => self.log.push(format!("Key pressed: {u}")),
-            KeyCode::Left => {self.map.move_player(map::MoveDirection::Left)},
-            KeyCode::Right => {self.map.move_player(map::MoveDirection::Right)},
-            KeyCode::Up => {self.map.move_player(map::MoveDirection::Up)},
-            KeyCode::Down => {self.map.move_player(map::MoveDirection::Down)},
+            KeyCode::Left => self.map.move_player(map::MoveDirection::Left),
+            KeyCode::Right => self.map.move_player(map::MoveDirection::Right),
+            KeyCode::Up => self.map.move_player(map::MoveDirection::Up),
+            KeyCode::Down => self.map.move_player(map::MoveDirection::Down),
             _ => {
                 dbg!(key_event);
                 todo!()
@@ -93,8 +104,12 @@ fn main() -> Result<()> {
     let file = File::open(path)?;
     let reader = BufReader::new(file);
     let monster_collection: Vec<Monster> = serde_json::from_reader(reader)?;
-    let map = map::Map::default();
-    let mut app = App::default();
+    // let mut app = App::default();
+    let mut app = App::new();
+    app.log.push(format!(
+        "Player position: {:?}",
+        app.map.player.borrow().coord
+    ));
     enable_raw_mode()?;
     execute!(io::stdout(), EnterAlternateScreen)?;
     let mut terminal = Terminal::new(CrosstermBackend::new(io::stdout()))?;
