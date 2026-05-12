@@ -21,8 +21,8 @@ use std::io::BufReader;
 use std::rc::Rc;
 
 mod map;
-mod player;
-use player::{Monster, Player};
+mod monster;
+use monster::{Monster, Player};
 
 /// What to display on screen
 #[derive(Debug, Default, Clone)]
