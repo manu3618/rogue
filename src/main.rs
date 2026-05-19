@@ -1,9 +1,10 @@
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
-use rand::prelude::*;
+// use rand::prelude::*;
 use ratatui::prelude::Stylize;
 use ratatui::{
-    DefaultTerminal, Frame, Terminal,
+    // DefaultTerminal, Frame,
+    Terminal,
     buffer::Buffer,
     crossterm::{
         execute,
@@ -11,8 +12,11 @@ use ratatui::{
     },
     layout::{Constraint, Direction, Layout, Rect},
     prelude::CrosstermBackend,
-    text::{Line, Text},
-    widgets::{Block, Paragraph, Widget},
+    text::Line,
+    widgets::{
+        //Block, Paragraph,
+        Widget,
+    },
 };
 use std::cell::RefCell;
 use std::fs::File;

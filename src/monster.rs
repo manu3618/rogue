@@ -1,18 +1,5 @@
-use anyhow::Result;
+// use anyhow::Result;
 use rand::prelude::*;
-use ratatui::prelude::Stylize;
-use ratatui::{
-    DefaultTerminal, Frame, Terminal,
-    buffer::Buffer,
-    crossterm::{
-        execute,
-        terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
-    },
-    layout::{Constraint, Direction, Layout, Rect},
-    prelude::CrosstermBackend,
-    text::{Line, Text},
-    widgets::{Block, Paragraph, Widget},
-};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Default, Clone)]

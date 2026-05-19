@@ -2,15 +2,9 @@ use crate::Monster;
 use crate::Player;
 use itertools::iproduct;
 use rand::prelude::*;
-use ratatui::prelude::Stylize;
-use ratatui::{
-    buffer::Buffer,
-    layout::{Constraint, Direction, Layout, Rect},
-    prelude::CrosstermBackend,
-    text::{Line, Text},
-    widgets::{Block, Paragraph, Widget},
-};
-use std::borrow::BorrowMut;
+// use ratatui::prelude::Stylize;
+use ratatui::{buffer::Buffer, layout::Rect, text::Text, widgets::Widget};
+// use std::borrow::BorrowMut;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -28,6 +22,7 @@ struct Room {
     end_line: usize,
     start_col: usize,
     end_col: usize,
+    has_light: bool, // entirely dicoverable or not
 }
 
 impl Room {
@@ -59,6 +54,45 @@ impl Room {
             (self.end_line + self.start_line) / 2,
             (self.end_col + self.start_col) / 2,
         )
+    }
+
+    fn is_inside(&self, coord: (usize, usize)) -> bool {
+        [
+            coord.0 > self.start_line,
+            coord.0 < self.end_line,
+            coord.1 > self.start_col,
+            coord.1 < self.end_col,
+        ]
+        .iter()
+        .all(|&x| x)
+    }
+
+    fn is_border(&self, coord: (usize, usize)) -> bool {
+        [
+            coord.0 == self.start_line && coord.1 >= self.start_col && coord.1 <= self.end_col,
+            coord.0 == self.end_line && coord.1 >= self.start_col && coord.1 <= self.end_col,
+            coord.1 == self.start_col && coord.0 >= self.start_line && coord.0 <= self.end_line,
+            coord.1 == self.end_col && coord.0 >= self.start_line && coord.0 <= self.end_line,
+        ]
+        .iter()
+        .any(|&x| x)
+    }
+
+    fn get_all_coords(&self) -> Vec<(usize, usize)> {
+        iproduct!(
+            self.start_line..=self.end_line,
+            self.start_col..=self.end_col
+        )
+        .collect()
+    }
+
+    fn get_borders(&self) -> Vec<(usize, usize)> {
+        (self.start_line..=self.end_line)
+            .map(|line| (line, self.start_col))
+            .chain((self.start_line..=self.end_line).map(|line| (line, self.end_col)))
+            .chain((self.start_col..=self.end_col).map(|col| (self.start_line, col)))
+            .chain((self.start_col..=self.end_col).map(|col| (self.end_line, col)))
+            .collect()
     }
 }
 
@@ -170,15 +204,23 @@ impl Map {
         }
         placements.shuffle(&mut rng);
         {
-            let mut p = Rc::clone(&player);
+            let p = Rc::clone(&player);
             (&*p).borrow_mut().coord = placements.pop().unwrap();
         }
 
         // link rooms
-        map.generate_corridors(&mut rng);
+        // TODO: check all rooms are connected
+        // let mut all_room_connected = false;
+        // while !all_room_connected {
+        for _ in 0..map.rooms.len() {
+            map.rooms.shuffle(&mut rng);
+            map.generate_corridors(&mut rng);
+        }
+
         // TODO: generate monsters
         // TODO: generate loot
         // TODO: place player
+        // TODO: place exits
         map
     }
 
@@ -218,6 +260,7 @@ impl Map {
                 end_line,
                 start_col,
                 end_col,
+                has_light: true,
             });
 
             placements.append(
@@ -236,7 +279,7 @@ impl Map {
 
     /// Generate corridors between rooms
     ///
-    /// generate a sigle corridor between consecutive rooms.
+    /// generate a single corridor between consecutive rooms.
     /// if the choosen path intersect with either a corridor or a room,
     /// then the path drawing stops at the intersection.
     fn generate_corridors(&mut self, rng: &mut ThreadRng) {
@@ -287,35 +330,52 @@ impl Map {
                     return;
                 };
 
-            dbg!(get_trajectory(
-                direction.clone(),
-                dbg!(start_coord),
-                dbg!(end_coord)
-            ));
-            let binding = get_trajectory(direction, start_coord, end_coord);
-            let mut cells = binding.iter();
+            let mut cells = get_trajectory(direction, start_coord, end_coord).into_iter();
 
-            let mut room_exit = (0, 0);
-            for &cell in &mut cells {
-                match self.map[cell.0][cell.1] {
-                    '|' | '-' => room_exit = cell, // still on a wall
-                    _ => {
-                        self.map[cell.0][cell.1] = '#';
-                        break;
-                    }
+            // find first cell outside first room
+            let mut exit_room = (0, 0);
+            for cell in &mut cells {
+                let is_inside = [
+                    room1.is_border(cell),
+                    room1.is_inside(cell),
+                    room1.is_border(cell),
+                    room1.is_inside(cell),
+                ]
+                .iter()
+                .any(|&x| x);
+                if is_inside {
+                    exit_room = cell;
+                } else {
+                    self.map[cell.0][cell.1] = '#';
+                    break;
                 }
             }
-            self.map[room_exit.0][room_exit.1] = '+';
+            self.map[exit_room.0][exit_room.1] = '+';
 
-            for cell in cells {
+            for cell in &mut cells {
+                if room1.is_border(cell) || room2.is_border(cell) {
+                    self.map[cell.0][cell.1] = '+';
+                    break;
+                }
+                if room1.is_inside(cell) || room2.is_inside(cell) {
+                    break;
+                }
                 match self.map[cell.0][cell.1] {
                     '|' | '-' => {
-                        // stop at door, got to next corridor
-                        self.map[cell.0][cell.1] = '+';
+                        // room in path. stop at that room
                         break;
                     }
-                    '#' => break, // go to next corridor
+                    '#' => break, // cross another corridor, go to next corridor
                     _ => self.map[cell.0][cell.1] = '#',
+                }
+            }
+
+            // redraw doors
+            for r in &self.rooms {
+                for cell in r.get_borders() {
+                    if self.map[cell.0][cell.1] == '#' {
+                        self.map[cell.0][cell.1] = '+';
+                    }
                 }
             }
         }
@@ -328,7 +388,7 @@ impl Map {
         if self.col_nb < 9 {
             self.col_nb = 80
         }
-        self.map = vec![vec![' '; self.col_nb]; self.line_nb]; // TODO: chang empty by walls?
+        self.map = vec![vec!['\u{00A0}'; self.col_nb]; self.line_nb];
         self.discovered_map = vec![vec![' '; self.col_nb]; self.line_nb];
     }
 
@@ -343,9 +403,8 @@ impl Map {
         {
             let mut p = (&*self.player).borrow_mut();
             match self.get(new_coords) {
-                Some('|') | Some('-') => {
-                    return;
-                } // wall, do no move
+                Some('|') | Some('-') => return,               // wall, do no move
+                Some('\u{00A0}') | Some('\u{202F}') => return, // wall outside a room
                 Some('+') | Some('#') => p.coord = new_coords, // corridor
                 Some(' ') | Some('.') => p.coord = new_coords, // empty room
                 Some('@') => {}                                // no move
@@ -354,6 +413,16 @@ impl Map {
                     todo!()
                 } //monster
                 _ => {}
+            }
+        }
+
+        for room in &self.rooms {
+            if room.is_inside(self.player.borrow().coord) && room.has_light {
+                // See all room
+                for (row, col) in room.get_all_coords() {
+                    self.discovered_map[row][col] = self.map[row][col].clone();
+                    self.displayed_map[row][col] = self.discovered_map[row][col];
+                }
             }
         }
 
