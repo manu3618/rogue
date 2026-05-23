@@ -18,6 +18,7 @@ pub(crate) enum MoveDirection {
 
 #[derive(Debug, Default, Clone)]
 struct Room {
+    id: usize,
     start_line: usize,
     end_line: usize,
     start_col: usize,
@@ -192,12 +193,17 @@ impl Map {
         let mut rng = rand::rng();
         let mut map = Self::default();
         map.player = Rc::clone(&player);
+        let min_room_nb = 3;
 
         // TODO: generate level
 
         // generate rooms
         map.generate_empty();
         let mut placements = map.generate_rooms(&mut rng);
+        while map.rooms.len() < min_room_nb {
+            map.generate_empty();
+            placements = map.generate_rooms(&mut rng);
+        };
         map.rooms.shuffle(&mut rng);
         for room in &map.rooms {
             room.draw(&mut map.map);
@@ -210,12 +216,7 @@ impl Map {
 
         // link rooms
         // TODO: check all rooms are connected
-        // let mut all_room_connected = false;
-        // while !all_room_connected {
-        for _ in 0..map.rooms.len() {
-            map.rooms.shuffle(&mut rng);
-            map.generate_corridors(&mut rng);
-        }
+        map.generate_corridors(&mut rng);
 
         // TODO: generate monsters
         // TODO: generate loot
@@ -228,12 +229,16 @@ impl Map {
     fn generate_rooms(&mut self, rng: &mut ThreadRng) -> Vec<(usize, usize)> {
         let max_placement_per_room = 5;
         let mut placements = Vec::new();
-        let col_borders: Vec<usize> = (0..4).map(|x| x * self.col_nb / 3).collect();
-        let line_borders: Vec<usize> = (0..4).map(|x| x * self.line_nb / 3).collect();
-        for ((min_col, max_col), (min_line, max_line)) in iproduct!(
+        let col_nb = 3;
+        let line_nb = 3;
+        let col_borders: Vec<usize> = (0..=col_nb).map(|x| x * self.col_nb / col_nb).collect();
+        let line_borders: Vec<usize> = (0..=line_nb).map(|x| x * self.line_nb / line_nb).collect();
+        for (id, ((min_col, max_col), (min_line, max_line))) in iproduct!(
             col_borders.iter().zip(col_borders.iter().skip(1)),
             line_borders.iter().zip(line_borders.iter().skip(1))
-        ) {
+        )
+        .enumerate()
+        {
             if rng.random_range(0..4) == 0 {
                 continue;
             }
@@ -242,20 +247,21 @@ impl Map {
                 .collect();
             let (start_col, end_col) = (
                 cols.clone().into_iter().min().unwrap(),
-                cols.into_iter().max().unwrap(),
+                cols.into_iter().max().unwrap() - 1,
             );
             let lines: Vec<_> = (0..3)
                 .map(|_| rng.random_range(min_line + 1..*max_line))
                 .collect();
             let (start_line, end_line) = (
                 lines.clone().into_iter().min().unwrap(),
-                lines.into_iter().max().unwrap(),
+                lines.into_iter().max().unwrap() - 1,
             );
-            if (end_col - start_col < 3) || (end_line - start_line < 3) {
+            if (end_col - start_col < 4) || (end_line - start_line < 4) {
                 continue;
             }
 
             self.rooms.push(Room {
+                id,
                 start_line,
                 end_line,
                 start_col,
@@ -283,105 +289,161 @@ impl Map {
     /// if the choosen path intersect with either a corridor or a room,
     /// then the path drawing stops at the intersection.
     fn generate_corridors(&mut self, rng: &mut ThreadRng) {
-        for (room1, room2) in self.rooms.iter().zip(self.rooms.iter().skip(1)) {
-            let (direction, start_coord, end_coord) =
-                if (room2.start_col > 3) && (room1.end_col < room2.start_col - 3) {
-                    // enough space for horizontal corridor room1 -> room2
-                    (
-                        MoveDirection::Right,
-                        (
-                            rng.random_range(room1.start_line + 1..room1.end_line),
-                            room1.end_col,
-                        ),
-                        (room2.center()),
-                    )
-                } else if (room2.start_line > 3) && (room1.end_line < room2.start_line - 3) {
-                    // enough space for vertical corridor room1 -> room2
-                    (
-                        MoveDirection::Down,
-                        (
-                            room1.end_line,
-                            rng.random_range(room1.start_col + 1..room1.end_col),
-                        ),
-                        (room2.center()),
-                    )
-                } else if (room1.start_col > 3) && (room2.end_col < room1.start_col - 3) {
-                    // enough space for horizontal corridor room2 -> room1
-                    (
-                        MoveDirection::Right,
-                        (
-                            rng.random_range(room2.start_line + 1..room2.end_line),
-                            room2.end_col,
-                        ),
-                        (room1.center()),
-                    )
-                } else if (room1.start_line > 3) && (room2.end_line < room1.start_line - 3) {
-                    // enough space for vertical corridor room2 -> room1
-                    (
-                        MoveDirection::Down,
-                        (
-                            room2.end_line,
-                            rng.random_range(room2.start_col + 1..room2.end_col),
-                        ),
-                        (room1.center()),
-                    )
-                } else {
-                    // No corridor to draw
-                    return;
-                };
-
-            let mut cells = get_trajectory(direction, start_coord, end_coord).into_iter();
-
-            // find first cell outside first room
-            let mut exit_room = (0, 0);
-            for cell in &mut cells {
-                let is_inside = [
-                    room1.is_border(cell),
-                    room1.is_inside(cell),
-                    room1.is_border(cell),
-                    room1.is_inside(cell),
-                ]
+        let mut not_connected: Vec<usize> = self.rooms.iter().map(|r| r.id).collect();
+        let mut connected: Vec<usize> = vec![not_connected.choose(rng).copied().unwrap()];
+        not_connected = not_connected
+            .iter()
+            .filter(|elt| !connected.contains(elt))
+            .copied()
+            .collect();
+        while !not_connected.is_empty() {
+            let anchor = connected.choose(rng).copied().unwrap();
+            let anchor = self
+                .rooms
                 .iter()
-                .any(|&x| x);
-                if is_inside {
-                    exit_room = cell;
-                } else {
-                    self.map[cell.0][cell.1] = '#';
-                    break;
-                }
+                .filter(|r| r.id == anchor)
+                .cloned()
+                .next()
+                .unwrap();
+            let new_room = not_connected.choose(rng).copied().unwrap();
+            let new_room = self
+                .rooms
+                .iter()
+                .filter(|r| r.id == new_room)
+                .cloned()
+                .next()
+                .unwrap();
+            match self.connect_rooms(&anchor, &new_room, rng) {
+                Ok(_) => connected.push(new_room.id),
+                Err(_) => {} // failed to connect this time
             }
-            self.map[exit_room.0][exit_room.1] = '+';
-
-            for cell in &mut cells {
-                if room1.is_border(cell) || room2.is_border(cell) {
-                    self.map[cell.0][cell.1] = '+';
-                    break;
-                }
-                if room1.is_inside(cell) || room2.is_inside(cell) {
-                    break;
-                }
-                match self.map[cell.0][cell.1] {
-                    '|' | '-' => {
-                        // room in path. stop at that room
-                        break;
+            not_connected = self
+                .rooms
+                .iter()
+                .filter_map(|r| {
+                    if connected.contains(&r.id) {
+                        None
+                    } else {
+                        Some(r.id)
                     }
-                    '#' => break, // cross another corridor, go to next corridor
-                    _ => self.map[cell.0][cell.1] = '#',
-                }
-            }
-
-            // redraw doors
-            for r in &self.rooms {
-                for cell in r.get_borders() {
-                    if self.map[cell.0][cell.1] == '#' {
-                        self.map[cell.0][cell.1] = '+';
-                    }
-                }
-            }
+                })
+                .collect();
         }
     }
 
+    fn connect_rooms(
+        &mut self,
+        room1: &Room,
+        room2: &Room,
+        rng: &mut ThreadRng,
+    ) -> Result<(), String> {
+        let (direction, start_coord, end_coord) =
+            if (room2.start_col > 3) && (room1.end_col < room2.start_col - 3) {
+                // enough space for horizontal corridor room1 -> room2
+                (
+                    MoveDirection::Right,
+                    (
+                        rng.random_range(room1.start_line + 1..room1.end_line),
+                        room1.end_col,
+                    ),
+                    (room2.center()),
+                )
+            } else if (room2.start_line > 3) && (room1.end_line < room2.start_line - 3) {
+                // enough space for vertical corridor room1 -> room2
+                (
+                    MoveDirection::Down,
+                    (
+                        room1.end_line,
+                        rng.random_range(room1.start_col + 1..room1.end_col),
+                    ),
+                    (room2.center()),
+                )
+            } else if (room1.start_col > 3) && (room2.end_col < room1.start_col - 3) {
+                // enough space for horizontal corridor room2 -> room1
+                (
+                    MoveDirection::Right,
+                    (
+                        rng.random_range(room2.start_line + 1..room2.end_line),
+                        room2.end_col,
+                    ),
+                    (room1.center()),
+                )
+            } else if (room1.start_line > 3) && (room2.end_line < room1.start_line - 3) {
+                // enough space for vertical corridor room2 -> room1
+                (
+                    MoveDirection::Down,
+                    (
+                        room2.end_line,
+                        rng.random_range(room2.start_col + 1..room2.end_col),
+                    ),
+                    (room1.center()),
+                )
+            } else {
+                // No corridor to draw
+                unreachable!();
+            };
+
+        let mut cells = get_trajectory(direction, start_coord, end_coord).into_iter();
+
+        // find first cell outside first room
+        let mut exit_room = (0, 0);
+        for cell in &mut cells {
+            let is_inside = [
+                room1.is_border(cell),
+                room1.is_inside(cell),
+                room1.is_border(cell),
+                room1.is_inside(cell),
+            ]
+            .iter()
+            .any(|&x| x);
+            if is_inside {
+                exit_room = cell;
+            } else {
+                self.map[cell.0][cell.1] = '#';
+                break;
+            }
+        }
+        self.map[exit_room.0][exit_room.1] = '+';
+
+        for cell in &mut cells {
+            if room1.is_border(cell) || room2.is_border(cell) {
+                self.map[cell.0][cell.1] = '+';
+                break;
+            }
+            if room1.is_inside(cell) || room2.is_inside(cell) {
+                break;
+            }
+            match self.map[cell.0][cell.1] {
+                '|' | '-' => return Err("end in an unexepected room".into()),
+                '#' => return Err("Corridor cross another corridor".into()),
+                _ => self.map[cell.0][cell.1] = '#',
+            }
+        }
+
+        // redraw doors
+        for r in &self.rooms {
+            for cell in r.get_borders() {
+                let c = self.map[cell.0][cell.1];
+                let u = self.map[cell.0 - 1][cell.1];
+                let d = self.map[cell.0 + 1][cell.1];
+                let l = self.map[cell.0][cell.1 - 1];
+                let r = self.map[cell.0][cell.1 + 1];
+                match (c, u, d, l, r) {
+                    (_, '|', _, '-', _)
+                    | (_, '|', _, _, '-')
+                    | (_, _, '|', '-', _)
+                    | (_, _, '|', _, '-') => self.map[cell.0][cell.1] = '-', // corner
+                    ('|', _, _, '#', _) | ('|', _, _, _, '#') => self.map[cell.0][cell.1] = '+',
+                    ('-', '#', _, _, _) | ('-', _, '#', _, _) => self.map[cell.0][cell.1] = '+',
+                    _ => {}
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn generate_empty(&mut self) {
+        self.rooms.truncate(0);
         if self.line_nb < 9 {
             self.line_nb = 23
         }
