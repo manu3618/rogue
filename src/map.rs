@@ -2,13 +2,14 @@ use crate::Monster;
 use crate::Player;
 use itertools::iproduct;
 use rand::prelude::*;
+use std::fmt;
 // use ratatui::prelude::Stylize;
 use ratatui::{buffer::Buffer, layout::Rect, text::Text, widgets::Widget};
 // use std::borrow::BorrowMut;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub(crate) enum MoveDirection {
     Left,
     Right,
@@ -32,7 +33,7 @@ impl Room {
         assert!(self.end_line < grid.len(), "not enough lines in grid");
         assert!(
             grid.iter()
-                .filter(|line| !(self.end_col < line.len()))
+                .filter(|line| self.end_col >= line.len())
                 .collect::<Vec<_>>()
                 .is_empty(),
             "not enough column in grid"
@@ -40,20 +41,30 @@ impl Room {
         for (line, col) in iproduct!(self.start_line..self.end_line, self.start_col..self.end_col) {
             grid[line][col] = ' ';
         }
-        for line in self.start_line..=self.end_line {
-            grid[line][self.start_col] = '|';
-            grid[line][self.end_col] = '|';
+        for line in grid
+            .iter_mut()
+            .take(self.end_line + 1)
+            .skip(self.start_line)
+        {
+            line[self.start_col] = '|';
+            line[self.end_col] = '|';
         }
-        for col in self.start_col..=self.end_col {
-            grid[self.start_line][col] = '-';
-            grid[self.end_line][col] = '-';
-        }
+        let new = ['-'].repeat(self.end_col - self.start_col + 1);
+        grid[self.start_line].splice(self.start_col..=self.end_col, new.clone());
+        grid[self.end_line].splice(self.start_col..=self.end_col, new);
     }
 
     fn center(&self) -> (usize, usize) {
         (
             (self.end_line + self.start_line) / 2,
             (self.end_col + self.start_col) / 2,
+        )
+    }
+
+    fn random_inside(&self, rng: &mut ThreadRng) -> (usize, usize) {
+        (
+            rng.random_range(self.start_line + 1..self.end_line),
+            rng.random_range(self.start_col + 1..self.end_col),
         )
     }
 
@@ -79,6 +90,17 @@ impl Room {
         .any(|&x| x)
     }
 
+    fn is_corner(&self, coord: (usize, usize)) -> bool {
+        [
+            coord.0 == self.start_line && coord.1 == self.start_col,
+            coord.0 == self.start_line && coord.1 == self.end_col,
+            coord.0 == self.end_line && coord.1 == self.start_col,
+            coord.0 == self.end_line && coord.1 == self.end_col,
+        ]
+        .iter()
+        .any(|&x| x)
+    }
+
     fn get_all_coords(&self) -> Vec<(usize, usize)> {
         iproduct!(
             self.start_line..=self.end_line,
@@ -97,7 +119,8 @@ impl Room {
     }
 }
 
-fn get_trajectory(
+/// draw a path in form of zigzag
+fn get_trajectory_s(
     direction: MoveDirection,
     start: (usize, usize),
     end: (usize, usize),
@@ -136,6 +159,42 @@ fn get_trajectory(
     path
 }
 
+/// draw a path in form of L
+fn get_trajectory_l(
+    direction: MoveDirection,
+    start: (usize, usize),
+    end: (usize, usize),
+) -> Vec<(usize, usize)> {
+    let mut path = Vec::new();
+    match direction {
+        MoveDirection::Right => {
+            path.append(&mut (start.1..=end.1).map(|col| (start.0, col)).collect());
+            if start.0 <= end.0 {
+                path.append(&mut (start.0..=end.0).map(|line| (line, end.1)).collect());
+            } else {
+                path.append(&mut (end.0..=start.0).rev().map(|line| (line, end.1)).collect());
+            }
+        }
+        MoveDirection::Down => {
+            path.append(&mut (start.0..=end.0).map(|line| (line, start.1)).collect());
+            if start.1 <= end.1 {
+                path.append(&mut (start.1..=end.1).map(|col| (end.0, col)).collect());
+            } else {
+                path.append(&mut (end.1..=start.1).rev().map(|col| (end.0, col)).collect());
+            }
+        }
+        MoveDirection::Left => {
+            path = get_trajectory_l(MoveDirection::Right, end, start);
+            path.reverse();
+        }
+        MoveDirection::Up => {
+            path = get_trajectory_l(MoveDirection::Down, end, start);
+            path.reverse();
+        }
+    }
+    path.dedup();
+    path
+}
 #[derive(Debug, Clone)]
 pub(crate) struct Map {
     /// Map, coord (line, column) with line (0, 0) at top left,
@@ -187,6 +246,20 @@ impl Default for Map {
     }
 }
 
+impl fmt::Display for Map {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            self.map
+                .iter()
+                .map(|line| line.iter().collect::<String>())
+                .collect::<Vec<_>>()
+                .join("\n")
+        )
+    }
+}
+
 impl Map {
     /// Generate a level and place the player in it
     pub fn new(level_nb: u8, player: Rc<RefCell<Player>>) -> Self {
@@ -203,7 +276,7 @@ impl Map {
         while map.rooms.len() < min_room_nb {
             map.generate_empty();
             placements = map.generate_rooms(&mut rng);
-        };
+        }
         map.rooms.shuffle(&mut rng);
         for room in &map.rooms {
             room.draw(&mut map.map);
@@ -239,7 +312,7 @@ impl Map {
         )
         .enumerate()
         {
-            if rng.random_range(0..4) == 0 {
+            if rng.random_range(0..8) == 0 {
                 continue;
             }
             let cols: Vec<_> = (0..3)
@@ -247,56 +320,55 @@ impl Map {
                 .collect();
             let (start_col, end_col) = (
                 cols.clone().into_iter().min().unwrap(),
-                cols.into_iter().max().unwrap() - 1,
+                cols.into_iter().max().unwrap(),
             );
             let lines: Vec<_> = (0..3)
                 .map(|_| rng.random_range(min_line + 1..*max_line))
                 .collect();
             let (start_line, end_line) = (
                 lines.clone().into_iter().min().unwrap(),
-                lines.into_iter().max().unwrap() - 1,
+                lines.into_iter().max().unwrap(),
             );
             if (end_col - start_col < 4) || (end_line - start_line < 4) {
                 continue;
             }
 
-            self.rooms.push(Room {
+            let new_room = Room {
                 id,
                 start_line,
                 end_line,
                 start_col,
                 end_col,
                 has_light: true,
-            });
+            };
 
             placements.append(
                 &mut (0..max_placement_per_room)
-                    .map(|_| {
-                        (
-                            rng.random_range(start_line + 1..end_line),
-                            rng.random_range(start_col + 1..end_col),
-                        )
-                    })
+                    .map(|_| new_room.random_inside(rng))
                     .collect::<Vec<_>>(),
-            )
+            );
+            self.rooms.push(new_room);
         }
         placements
     }
 
     /// Generate corridors between rooms
     ///
-    /// generate a single corridor between consecutive rooms.
-    /// if the choosen path intersect with either a corridor or a room,
-    /// then the path drawing stops at the intersection.
+    /// generate corridors between rooms until all rooms are connected.
     fn generate_corridors(&mut self, rng: &mut ThreadRng) {
         let mut not_connected: Vec<usize> = self.rooms.iter().map(|r| r.id).collect();
         let mut connected: Vec<usize> = vec![not_connected.choose(rng).copied().unwrap()];
+        assert!(!connected.is_empty());
         not_connected = not_connected
             .iter()
             .filter(|elt| !connected.contains(elt))
             .copied()
             .collect();
+        assert!(!not_connected.is_empty());
+        let mut max_iter = 100;
         while !not_connected.is_empty() {
+            assert!(max_iter > 0);
+            max_iter -= 1;
             let anchor = connected.choose(rng).copied().unwrap();
             let anchor = self
                 .rooms
@@ -314,7 +386,7 @@ impl Map {
                 .next()
                 .unwrap();
             match self.connect_rooms(&anchor, &new_room, rng) {
-                Ok(_) => connected.push(new_room.id),
+                Ok(id) => connected.push(id),
                 Err(_) => {} // failed to connect this time
             }
             not_connected = self
@@ -331,12 +403,18 @@ impl Map {
         }
     }
 
+    /// Connect two rooms togethers
+    ///
+    /// Draw a single corridor
+    /// if the choosen path intersect with either a corridor or a room,
+    /// then the path drawing stops at the intersection.
+    /// Return the room id connected (should be room2.id)
     fn connect_rooms(
         &mut self,
         room1: &Room,
         room2: &Room,
         rng: &mut ThreadRng,
-    ) -> Result<(), String> {
+    ) -> Result<usize, String> {
         let (direction, start_coord, end_coord) =
             if (room2.start_col > 3) && (room1.end_col < room2.start_col - 3) {
                 // enough space for horizontal corridor room1 -> room2
@@ -344,7 +422,7 @@ impl Map {
                     MoveDirection::Right,
                     (
                         rng.random_range(room1.start_line + 1..room1.end_line),
-                        room1.end_col,
+                        rng.random_range(room1.start_col + 1..room1.end_col),
                     ),
                     (room2.center()),
                 )
@@ -352,72 +430,67 @@ impl Map {
                 // enough space for vertical corridor room1 -> room2
                 (
                     MoveDirection::Down,
-                    (
-                        room1.end_line,
-                        rng.random_range(room1.start_col + 1..room1.end_col),
-                    ),
-                    (room2.center()),
+                    room1.random_inside(rng),
+                    room2.center(),
                 )
             } else if (room1.start_col > 3) && (room2.end_col < room1.start_col - 3) {
                 // enough space for horizontal corridor room2 -> room1
                 (
-                    MoveDirection::Right,
-                    (
-                        rng.random_range(room2.start_line + 1..room2.end_line),
-                        room2.end_col,
-                    ),
-                    (room1.center()),
+                    MoveDirection::Left,
+                    room1.center(),
+                    room2.random_inside(rng),
                 )
             } else if (room1.start_line > 3) && (room2.end_line < room1.start_line - 3) {
                 // enough space for vertical corridor room2 -> room1
-                (
-                    MoveDirection::Down,
-                    (
-                        room2.end_line,
-                        rng.random_range(room2.start_col + 1..room2.end_col),
-                    ),
-                    (room1.center()),
-                )
+                (MoveDirection::Up, room1.center(), room2.random_inside(rng))
             } else {
                 // No corridor to draw
-                unreachable!();
+                return Err("No enough space to draw a corridor".into());
             };
 
-        let mut cells = get_trajectory(direction, start_coord, end_coord).into_iter();
+        let cells = get_trajectory_l(direction, start_coord, end_coord).into_iter();
+        let cells = cells.collect::<Vec<_>>();
+        let cells = cells.windows(2);
+        for cell in cells.skip_while(|c| room1.is_border(c[1]) || room1.is_inside(c[1])) {
+            let (previous_cell, current_cell) = (cell[0], cell[1]);
+            dbg!(&previous_cell);
+            dbg!(&current_cell);
+            if room1.is_border(previous_cell) && !room1.is_border(current_cell) {
+                // exit door
+                self.map[previous_cell.0][previous_cell.1] = '+';
+            }
+            if let Some(room) = self
+                .rooms
+                .iter()
+                .filter(|r| r.is_corner(current_cell))
+                .next()
+            {
+                return Err(format!("too close to room corner {}", room.id));
+            }
+            if let Some(room) = self
+                .rooms
+                .iter()
+                .filter(|r| r.is_border(current_cell) && r.is_border(previous_cell))
+                .next()
+            {
+                return Err(format!("along room {}", room.id));
+            }
 
-        // find first cell outside first room
-        let mut exit_room = (0, 0);
-        for cell in &mut cells {
-            let is_inside = [
-                room1.is_border(cell),
-                room1.is_inside(cell),
-                room1.is_border(cell),
-                room1.is_inside(cell),
-            ]
-            .iter()
-            .any(|&x| x);
-            if is_inside {
-                exit_room = cell;
-            } else {
-                self.map[cell.0][cell.1] = '#';
-                break;
+            if let Some(room) = self
+                .rooms
+                .iter()
+                .filter(|r| r.is_border(previous_cell) && r.is_inside(current_cell))
+                .next()
+            {
+                // end in a room
+                self.map[previous_cell.0][previous_cell.1] = '+';
+                return Ok(room.id);
             }
-        }
-        self.map[exit_room.0][exit_room.1] = '+';
+            if self.map[current_cell.0][current_cell.1] == '#' {
+                return Err("Corridor cross another corridor".into());
+            }
 
-        for cell in &mut cells {
-            if room1.is_border(cell) || room2.is_border(cell) {
-                self.map[cell.0][cell.1] = '+';
-                break;
-            }
-            if room1.is_inside(cell) || room2.is_inside(cell) {
-                break;
-            }
-            match self.map[cell.0][cell.1] {
-                '|' | '-' => return Err("end in an unexepected room".into()),
-                '#' => return Err("Corridor cross another corridor".into()),
-                _ => self.map[cell.0][cell.1] = '#',
-            }
+            self.map[current_cell.0][current_cell.1] = '#'
         }
 
         // redraw doors
@@ -425,9 +498,16 @@ impl Map {
             for cell in r.get_borders() {
                 let c = self.map[cell.0][cell.1];
                 let u = self.map[cell.0 - 1][cell.1];
-                let d = self.map[cell.0 + 1][cell.1];
+                let d = self
+                    .map
+                    .get(cell.0 + 1)
+                    .cloned()
+                    .unwrap_or_default()
+                    .get(cell.1)
+                    .copied()
+                    .unwrap_or('-');
                 let l = self.map[cell.0][cell.1 - 1];
-                let r = self.map[cell.0][cell.1 + 1];
+                let r = self.map[cell.0].get(cell.1 + 1).copied().unwrap_or('|');
                 match (c, u, d, l, r) {
                     (_, '|', _, '-', _)
                     | (_, '|', _, _, '-')
@@ -439,7 +519,7 @@ impl Map {
                 }
             }
         }
-        Ok(())
+        Ok(room2.id)
     }
 
     fn generate_empty(&mut self) {
@@ -525,7 +605,7 @@ mod tests {
     fn traj0() {
         let start = (0, 0);
         let end = (5, 10);
-        let traj = get_trajectory(MoveDirection::Right, start, end);
+        let traj = get_trajectory_s(MoveDirection::Right, start, end);
         assert!(traj.contains(&(0, 5)));
     }
 
@@ -533,7 +613,7 @@ mod tests {
     fn traj1() {
         let start = (0, 0);
         let end = (7, 10);
-        let traj = get_trajectory(MoveDirection::Down, start, end);
+        let traj = get_trajectory_s(MoveDirection::Down, start, end);
         assert!(traj.contains(&(3, 7)));
     }
 
@@ -541,7 +621,35 @@ mod tests {
     fn traj3() {
         let start = (7, 0);
         let end = (0, 10);
-        let traj = get_trajectory(MoveDirection::Right, start, end);
+        let traj = get_trajectory_s(MoveDirection::Right, start, end);
         assert!(traj.contains(&(5, 5)));
+    }
+
+    #[test]
+    fn traj_l0() {
+        let start = (0, 0);
+        let end = (5, 10);
+        let traj_l = get_trajectory_l(MoveDirection::Right, start, end);
+        assert!(traj_l.contains(&(0, 5)));
+    }
+
+    #[test]
+    fn traj_l1() {
+        let start = (0, 0);
+        let end = (7, 10);
+        let traj_l = get_trajectory_l(MoveDirection::Down, start, end);
+        assert!(traj_l.contains(&(0, 0)));
+        assert!(traj_l.contains(&(7, 0)));
+        assert!(traj_l.contains(&(7, 10)));
+    }
+
+    #[test]
+    fn traj_l3() {
+        let start = (7, 0);
+        let end = (0, 10);
+        let traj_l = get_trajectory_l(MoveDirection::Right, start, end);
+        assert!(traj_l.contains(&(7, 0)));
+        assert!(traj_l.contains(&(7, 10)));
+        assert!(traj_l.contains(&(0, 10)));
     }
 }
