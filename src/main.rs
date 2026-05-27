@@ -114,6 +114,7 @@ fn main() -> Result<()> {
         "Player position: {:?}",
         app.map.player.borrow().coord
     ));
+    app.log.push(format!("room number: {}", app.map.room_nb()));
     enable_raw_mode()?;
     execute!(io::stdout(), EnterAlternateScreen)?;
     let mut terminal = Terminal::new(CrosstermBackend::new(io::stdout()))?;

@@ -248,12 +248,29 @@ impl Default for Map {
 
 impl fmt::Display for Map {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(
+            f,
+            "  {}",
+            (0..self.col_nb / 10)
+                .map(|c| format!("{:<10}", c))
+                .collect::<Vec<_>>()
+                .join("")
+        )?;
+        writeln!(
+            f,
+            "  {}",
+            (0..self.col_nb)
+                .map(|c| format!("{}", c % 10))
+                .collect::<Vec<_>>()
+                .join("")
+        )?;
         write!(
             f,
             "{}",
             self.map
                 .iter()
-                .map(|line| line.iter().collect::<String>())
+                .enumerate()
+                .map(|(idx, line)| format!("{:>2} {}", idx, line.iter().collect::<String>()))
                 .collect::<Vec<_>>()
                 .join("\n")
         )
@@ -264,8 +281,10 @@ impl Map {
     /// Generate a level and place the player in it
     pub fn new(level_nb: u8, player: Rc<RefCell<Player>>) -> Self {
         let mut rng = rand::rng();
-        let mut map = Self::default();
-        map.player = Rc::clone(&player);
+        let mut map = Map {
+            player: Rc::clone(&player),
+            ..Default::default()
+        };
         let min_room_nb = 3;
 
         // TODO: generate level
@@ -295,7 +314,12 @@ impl Map {
         // TODO: generate loot
         // TODO: place player
         // TODO: place exits
+        eprintln!("{}", &map);
         map
+    }
+
+    pub(crate) fn room_nb(&self) -> usize {
+        self.rooms.len()
     }
 
     /// Generate rooms and returns possible positions for object placements
@@ -365,29 +389,27 @@ impl Map {
             .copied()
             .collect();
         assert!(!not_connected.is_empty());
-        let mut max_iter = 100;
+        let mut max_iter = 1000;
         while !not_connected.is_empty() {
+            dbg!(&not_connected);
+            dbg!(&connected);
+            eprintln!("{}", &self);
             assert!(max_iter > 0);
             max_iter -= 1;
             let anchor = connected.choose(rng).copied().unwrap();
-            let anchor = self
-                .rooms
-                .iter()
-                .filter(|r| r.id == anchor)
-                .cloned()
-                .next()
-                .unwrap();
+            let anchor = self.rooms.iter().find(|r| r.id == anchor).cloned().unwrap();
             let new_room = not_connected.choose(rng).copied().unwrap();
             let new_room = self
                 .rooms
                 .iter()
-                .filter(|r| r.id == new_room)
+                .find(|r| r.id == new_room)
                 .cloned()
-                .next()
                 .unwrap();
-            match self.connect_rooms(&anchor, &new_room, rng) {
-                Ok(id) => connected.push(id),
-                Err(_) => {} // failed to connect this time
+
+            if let Ok(id) = self.connect_rooms(&anchor, &new_room, rng)
+                && !connected.contains(&id)
+            {
+                connected.push(id)
             }
             not_connected = self
                 .rooms
@@ -415,63 +437,48 @@ impl Map {
         room2: &Room,
         rng: &mut ThreadRng,
     ) -> Result<usize, String> {
-        let (direction, start_coord, end_coord) =
-            if (room2.start_col > 3) && (room1.end_col < room2.start_col - 3) {
-                // enough space for horizontal corridor room1 -> room2
-                (
-                    MoveDirection::Right,
-                    (
-                        rng.random_range(room1.start_line + 1..room1.end_line),
-                        rng.random_range(room1.start_col + 1..room1.end_col),
-                    ),
-                    (room2.center()),
-                )
-            } else if (room2.start_line > 3) && (room1.end_line < room2.start_line - 3) {
-                // enough space for vertical corridor room1 -> room2
-                (
-                    MoveDirection::Down,
-                    room1.random_inside(rng),
-                    room2.center(),
-                )
-            } else if (room1.start_col > 3) && (room2.end_col < room1.start_col - 3) {
-                // enough space for horizontal corridor room2 -> room1
-                (
-                    MoveDirection::Left,
-                    room1.center(),
-                    room2.random_inside(rng),
-                )
-            } else if (room1.start_line > 3) && (room2.end_line < room1.start_line - 3) {
-                // enough space for vertical corridor room2 -> room1
-                (MoveDirection::Up, room1.center(), room2.random_inside(rng))
+        let (start_coord, end_coord) = (room1.random_inside(rng), room2.center());
+        let direction =
+            if start_coord.0.abs_diff(end_coord.0) >= start_coord.1.abs_diff(end_coord.1) {
+                // vertical direction
+                if start_coord.0 > end_coord.0 {
+                    MoveDirection::Up
+                } else {
+                    MoveDirection::Down
+                }
             } else {
-                // No corridor to draw
-                return Err("No enough space to draw a corridor".into());
+                // horizontal direction
+                if start_coord.1 > end_coord.1 {
+                    MoveDirection::Left
+                } else {
+                    MoveDirection::Right
+                }
             };
 
+        dbg!(direction.clone(), start_coord, end_coord);
         let cells = get_trajectory_l(direction, start_coord, end_coord).into_iter();
         let cells = cells.collect::<Vec<_>>();
         let cells = cells.windows(2);
         for cell in cells.skip_while(|c| room1.is_border(c[1]) || room1.is_inside(c[1])) {
             let (previous_cell, current_cell) = (cell[0], cell[1]);
-            dbg!(&previous_cell);
-            dbg!(&current_cell);
+            if let Some(room) = self
+                .rooms
+                .iter()
+                .find(|r| r.is_corner(previous_cell) || r.is_corner(current_cell))
+            {
+                return Err(format!("into a the corner of room {}", room.id));
+            }
             if room1.is_border(previous_cell) && !room1.is_border(current_cell) {
                 // exit door
                 self.map[previous_cell.0][previous_cell.1] = '+';
             }
-            if let Some(room) = self
-                .rooms
-                .iter()
-                .filter(|r| r.is_corner(current_cell))
-                .next()
-            {
+            if let Some(room) = self.rooms.iter().find(|r| r.is_corner(current_cell)) {
                 return Err(format!("too close to room corner {}", room.id));
             }
             if let Some(room) = self
                 .rooms
                 .iter()
-                .filter(|r| r.is_border(current_cell) && r.is_border(previous_cell))
-                .next()
+                .find(|r| r.is_border(current_cell) && r.is_border(previous_cell))
             {
                 return Err(format!("along room {}", room.id));
             }
@@ -479,8 +486,7 @@ impl Map {
             if let Some(room) = self
                 .rooms
                 .iter()
-                .filter(|r| r.is_border(previous_cell) && r.is_inside(current_cell))
-                .next()
+                .find(|r| r.is_border(previous_cell) && r.is_inside(current_cell))
             {
                 // end in a room
                 self.map[previous_cell.0][previous_cell.1] = '+';
