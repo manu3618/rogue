@@ -438,6 +438,7 @@ impl Map {
         rng: &mut ThreadRng,
     ) -> Result<usize, String> {
         let (start_coord, end_coord) = (room1.random_inside(rng), room2.center());
+        // TODO: random direction given the quadrant
         let direction =
             if start_coord.0.abs_diff(end_coord.0) >= start_coord.1.abs_diff(end_coord.1) {
                 // vertical direction
@@ -574,10 +575,11 @@ impl Map {
             }
         }
 
-        for (row, col) in iproduct!(
-            curr_coords.0 - 2..=curr_coords.0 + 2,
-            curr_coords.1 - 2..=curr_coords.1 + 2
-        ) {
+        let discovered = self
+            .get_neighbors(curr_coords)
+            .into_iter()
+            .chain(self.get_neighbors(new_coords));
+        for (row, col) in discovered {
             self.discovered_map[row][col] = self.map[row][col].clone();
             self.displayed_map[row][col] = self.discovered_map[row][col];
             // TODO: add monster
@@ -587,6 +589,15 @@ impl Map {
 
     fn get(&self, coords: (usize, usize)) -> Option<char> {
         self.displayed_map.get(coords.0)?.get(coords.1).copied()
+    }
+
+    fn get_neighbors(&self, coords: (usize, usize)) -> Vec<(usize, usize)> {
+        let area = 1;
+        let line_min = if coords.0 < area { 0 } else { coords.0 - area };
+        let line_max = self.line_nb.min(coords.0 + area);
+        let col_min = if coords.1 < area { 0 } else { coords.1 - area };
+        let col_max = self.col_nb.min(coords.1 + area);
+        iproduct!(line_min..=line_max, col_min..=col_max).collect()
     }
 
     fn set(&mut self, coords: (usize, usize), value: char) {
