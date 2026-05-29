@@ -169,27 +169,36 @@ fn get_trajectory_l(
     match direction {
         MoveDirection::Right => {
             path.append(&mut (start.1..=end.1).map(|col| (start.0, col)).collect());
+        }
+        MoveDirection::Down => {
+            path.append(&mut (start.0..=end.0).map(|line| (line, start.1)).collect());
+        }
+        MoveDirection::Left => {
+            path.append(&mut (end.1..=start.1).rev().map(|col| (start.0, col)).collect());
+        }
+        MoveDirection::Up => {
+            path.append(
+                &mut (end.0..=start.0)
+                    .rev()
+                    .map(|line| (line, start.1))
+                    .collect(),
+            );
+        }
+    }
+    match direction {
+        MoveDirection::Right | MoveDirection::Left => {
             if start.0 <= end.0 {
                 path.append(&mut (start.0..=end.0).map(|line| (line, end.1)).collect());
             } else {
                 path.append(&mut (end.0..=start.0).rev().map(|line| (line, end.1)).collect());
             }
         }
-        MoveDirection::Down => {
-            path.append(&mut (start.0..=end.0).map(|line| (line, start.1)).collect());
+        MoveDirection::Up | MoveDirection::Down => {
             if start.1 <= end.1 {
                 path.append(&mut (start.1..=end.1).map(|col| (end.0, col)).collect());
             } else {
                 path.append(&mut (end.1..=start.1).rev().map(|col| (end.0, col)).collect());
             }
-        }
-        MoveDirection::Left => {
-            path = get_trajectory_l(MoveDirection::Right, end, start);
-            path.reverse();
-        }
-        MoveDirection::Up => {
-            path = get_trajectory_l(MoveDirection::Down, end, start);
-            path.reverse();
         }
     }
     path.dedup();
@@ -439,23 +448,27 @@ impl Map {
     ) -> Result<usize, String> {
         let (start_coord, end_coord) = (room1.random_inside(rng), room2.center());
         // TODO: random direction given the quadrant
-        let direction =
-            if start_coord.0.abs_diff(end_coord.0) >= start_coord.1.abs_diff(end_coord.1) {
-                // vertical direction
-                if start_coord.0 > end_coord.0 {
-                    MoveDirection::Up
-                } else {
-                    MoveDirection::Down
-                }
+        // XXX
+        let mut directions = Vec::new();
+        if start_coord.0.abs_diff(end_coord.0) >= start_coord.1.abs_diff(end_coord.1) {
+            // vertical direction
+            if start_coord.0 > end_coord.0 {
+                directions.push(MoveDirection::Up);
             } else {
-                // horizontal direction
-                if start_coord.1 > end_coord.1 {
-                    MoveDirection::Left
-                } else {
-                    MoveDirection::Right
-                }
-            };
+                directions.push(MoveDirection::Down);
+            }
+        } else {
+            // horizontal direction
+            if start_coord.1 > end_coord.1 {
+                directions.push(MoveDirection::Left);
+            } else {
+                directions.push(MoveDirection::Right);
+            }
+        };
 
+        let Some(direction) = directions.choose(rng).cloned() else {
+            return Err("not enough space".into());
+        };
         dbg!(direction.clone(), start_coord, end_coord);
         let cells = get_trajectory_l(direction, start_coord, end_coord).into_iter();
         let cells = cells.collect::<Vec<_>>();
@@ -668,5 +681,14 @@ mod tests {
         assert!(traj_l.contains(&(7, 0)));
         assert!(traj_l.contains(&(7, 10)));
         assert!(traj_l.contains(&(0, 10)));
+    }
+    #[test]
+    fn traj_l4() {
+        let start = (19, 68);
+        let end = (18, 15);
+        let traj_l = get_trajectory_l(MoveDirection::Left, start, end);
+        dbg!(&traj_l);
+        assert!(traj_l.contains(&(19, 60)));
+        assert!(traj_l.contains(&(19, 22)));
     }
 }
