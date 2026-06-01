@@ -217,7 +217,7 @@ pub(crate) struct Map {
     col_nb: usize,
     pub(crate) player: Rc<RefCell<Player>>,
     rooms: Vec<Room>,
-    monsters: Vec<Monster>,
+    pub(crate) monsters: Vec<Monster>,
 }
 
 impl Widget for Map {
@@ -321,6 +321,7 @@ impl Map {
 
         // TODO: generate monsters
         // TODO: generate loot
+        map.place_loot(level_nb, &mut rng);
         // TODO: place player
         // TODO: place exits
         eprintln!("{}", &map);
@@ -400,9 +401,6 @@ impl Map {
         assert!(!not_connected.is_empty());
         let mut max_iter = 1000;
         while !not_connected.is_empty() {
-            dbg!(&not_connected);
-            dbg!(&connected);
-            eprintln!("{}", &self);
             assert!(max_iter > 0);
             max_iter -= 1;
             let anchor = connected.choose(rng).copied().unwrap();
@@ -447,8 +445,6 @@ impl Map {
         rng: &mut ThreadRng,
     ) -> Result<usize, String> {
         let (start_coord, end_coord) = (room1.random_inside(rng), room2.center());
-        // TODO: random direction given the quadrant
-        // XXX
         let mut directions = Vec::new();
         if start_coord.0.abs_diff(end_coord.0) >= start_coord.1.abs_diff(end_coord.1) {
             // vertical direction
@@ -469,7 +465,6 @@ impl Map {
         let Some(direction) = directions.choose(rng).cloned() else {
             return Err("not enough space".into());
         };
-        dbg!(direction.clone(), start_coord, end_coord);
         let cells = get_trajectory_l(direction, start_coord, end_coord).into_iter();
         let cells = cells.collect::<Vec<_>>();
         let cells = cells.windows(2);
@@ -554,6 +549,44 @@ impl Map {
         self.discovered_map = vec![vec![' '; self.col_nb]; self.line_nb];
     }
 
+    /// Place monsters on the map
+    pub(crate) fn place_monsters(&mut self, monsters: &mut Vec<Monster>) {
+        let mut rng = rand::rng();
+        let player_coord = self.player.borrow().coord;
+        let mut placements: Vec<(usize, usize)> = Vec::new();
+        while placements.len() < monsters.len() {
+            let mut new_placements: Vec<(usize, usize)> = self
+                .rooms
+                .iter()
+                .filter_map(|r| {
+                    if r.is_inside(player_coord) {
+                        None
+                    } else {
+                        Some(r.random_inside(&mut rng))
+                    }
+                })
+                .collect();
+            placements.append(&mut new_placements);
+        }
+        placements.shuffle(&mut rng);
+        for monster in &mut *monsters {
+            monster.coord = placements.pop().expect("there should be enough placements");
+        }
+        self.monsters = monsters.to_vec();
+    }
+
+    fn place_loot(&mut self, level: u8, rng: &mut ThreadRng) {
+        let mut placements: Vec<(usize, usize)> = Vec::new();
+        // TODO: adjust number of item to pop
+        while placements.len() < (20 - level).into() {
+            let mut new_placements: Vec<(usize, usize)> =
+                self.rooms.iter().map(|r| r.random_inside(rng)).collect();
+            placements.append(&mut new_placements);
+        }
+        placements.shuffle(rng);
+        // TODO: place loot
+    }
+
     pub(crate) fn move_player(&mut self, direction: MoveDirection) {
         let curr_coords = self.player.borrow().coord;
         let new_coords = match direction {
@@ -585,6 +618,13 @@ impl Map {
                     self.discovered_map[row][col] = self.map[row][col].clone();
                     self.displayed_map[row][col] = self.discovered_map[row][col];
                 }
+
+                for monster in &self.monsters {
+                    if room.is_inside(monster.coord) {
+                        let fl = monster.get_name().chars().next().unwrap();
+                        self.displayed_map[monster.coord.0][monster.coord.1] = fl;
+                    }
+                }
             }
         }
 
@@ -595,7 +635,16 @@ impl Map {
         for (row, col) in discovered {
             self.discovered_map[row][col] = self.map[row][col].clone();
             self.displayed_map[row][col] = self.discovered_map[row][col];
-            // TODO: add monster
+            // place monster
+            if let Some(monster) = self
+                .monsters
+                .iter()
+                .filter(|m| m.coord == (row, col))
+                .next()
+            {
+                let fl = monster.get_name().chars().next().unwrap();
+                self.displayed_map[monster.coord.0][monster.coord.1] = fl;
+            }
         }
         self.displayed_map[new_coords.0][new_coords.1] = '@';
     }
@@ -613,14 +662,6 @@ impl Map {
         iproduct!(line_min..=line_max, col_min..=col_max).collect()
     }
 
-    fn set(&mut self, coords: (usize, usize), value: char) {
-        *self
-            .map
-            .get_mut(coords.0)
-            .unwrap()
-            .get_mut(coords.1)
-            .unwrap() = value;
-    }
     pub fn size(&self) -> (usize, usize) {
         (self.line_nb, self.col_nb)
     }

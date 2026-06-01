@@ -45,7 +45,7 @@ impl Player {
 pub(crate) struct Monster {
     name: String,
     #[serde(default)]
-    coord: (usize, usize),
+    pub(crate) coord: (usize, usize),
     #[serde(default)]
     hp: usize,
     min_hp: usize,
@@ -60,12 +60,21 @@ pub(crate) struct Monster {
 
 impl Monster {
     /// Generate a new monster
-    fn generate(&self) -> Self {
+    pub(crate) fn generate() -> Self {
         let mut rng = rand::rng();
+        let models: Vec<Monster> =
+            serde_json::from_str(include_str!("../data/monsters.json")).unwrap();
+        let model = models.choose(&mut rng).unwrap();
+        model.from_model(&mut rng)
+    }
+    fn from_model(&self, rng: &mut ThreadRng) -> Self {
         Self {
             hp: rng.random_range(self.min_hp..=self.max_hp),
             strength: rng.random_range(self.min_strength..=self.max_strength),
             ..self.clone()
         }
+    }
+    pub(crate) fn get_name(&self) -> &str {
+        self.name.as_str()
     }
 }

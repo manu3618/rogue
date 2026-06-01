@@ -24,6 +24,7 @@ use std::io;
 use std::io::BufReader;
 use std::rc::Rc;
 
+mod combat;
 mod map;
 mod monster;
 use monster::{Monster, Player};
@@ -33,6 +34,7 @@ use monster::{Monster, Player};
 enum Display {
     #[default]
     Map,
+    Combat,
     Inventory,
 }
 
@@ -40,7 +42,10 @@ enum Display {
 struct App {
     player: Rc<RefCell<Player>>,
     // monsters: Vec<Monster>,
+    /// current map
     map: map::Map,
+    /// curretnly generated maps
+    maps: Vec<map::Map>,
     display: Display,
     exit: bool,
     log: Vec<String>,
@@ -59,6 +64,7 @@ impl Widget for App {
         Line::from(self.log.last().unwrap_or(&"LOG".into()).clone()).render(chunks[0], buf);
         match self.display {
             Display::Map => self.map.render(chunks[1], buf),
+            Display::Combat => todo!(),
             Display::Inventory => todo!(),
         }
         Line::from("status".blue()).render(chunks[2], buf);
@@ -68,8 +74,11 @@ impl Widget for App {
 impl App {
     fn new() -> Self {
         let player = Rc::new(RefCell::new(Default::default()));
+        let mut map = map::Map::new(0, Rc::clone(&player));
+        let mut monsters: Vec<Monster> = (0..3).map(|_| Monster::generate()).collect();
+        map.place_monsters(&mut monsters);
         Self {
-            map: map::Map::new(0, Rc::clone(&player)),
+            map: map,
             player: Rc::clone(&player),
             ..Default::default()
         }
@@ -88,18 +97,27 @@ impl App {
     }
 
     fn handle_key_event(&mut self, key_event: KeyEvent) -> io::Result<()> {
-        match key_event.code {
-            KeyCode::Char(u) => self.log.push(format!("Key pressed: {u}")),
-            KeyCode::Left => self.map.move_player(map::MoveDirection::Left),
-            KeyCode::Right => self.map.move_player(map::MoveDirection::Right),
-            KeyCode::Up => self.map.move_player(map::MoveDirection::Up),
-            KeyCode::Down => self.map.move_player(map::MoveDirection::Down),
-            _ => {
-                dbg!(key_event);
-                todo!()
-            }
+        match self.display {
+            Display::Map => match key_event.code {
+                KeyCode::Char(u) => self.log.push(format!("Key pressed: {u}")),
+                KeyCode::Left => self.map.move_player(map::MoveDirection::Left),
+                KeyCode::Right => self.map.move_player(map::MoveDirection::Right),
+                KeyCode::Up => self.map.move_player(map::MoveDirection::Up),
+                KeyCode::Down => self.map.move_player(map::MoveDirection::Down),
+                _ => {
+                    dbg!(key_event);
+                    todo!()
+                }
+            },
+            Display::Combat => todo!(),
+            Display::Inventory => todo!(),
         }
         Ok(())
+    }
+
+    /// Change level, regenrating monster if needed
+    fn change_level(&mut self, new_level: u8) {
+        todo!()
     }
 }
 
@@ -115,6 +133,10 @@ fn main() -> Result<()> {
         app.map.player.borrow().coord
     ));
     app.log.push(format!("room number: {}", app.map.room_nb()));
+    app.log.push(format!(
+        "monster placement: {:?}",
+        app.map.monsters.first().unwrap().coord
+    ));
     enable_raw_mode()?;
     execute!(io::stdout(), EnterAlternateScreen)?;
     let mut terminal = Terminal::new(CrosstermBackend::new(io::stdout()))?;
