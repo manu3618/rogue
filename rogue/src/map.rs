@@ -204,6 +204,16 @@ fn get_trajectory_l(
     path.dedup();
     path
 }
+
+#[derive(Debug, Clone)]
+struct Loot; // TODO work on it
+
+#[derive(Debug, Clone)]
+pub(crate) enum Encounter {
+    Loot(Loot),
+    Monster(Monster),
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct Map {
     /// Map, coord (line, column) with line (0, 0) at top left,
@@ -218,6 +228,8 @@ pub(crate) struct Map {
     pub(crate) player: Rc<RefCell<Player>>,
     rooms: Vec<Room>,
     pub(crate) monsters: Vec<Monster>,
+    /// Am I encoutering something?
+    pub(crate) encounter: Option<Encounter>,
 }
 
 impl Widget for Map {
@@ -251,6 +263,7 @@ impl Default for Map {
             player,
             monsters,
             rooms,
+            encounter: None,
         }
     }
 }
@@ -605,7 +618,7 @@ impl Map {
                 Some('@') => {}                                // no move
                 Some(c) => {
                     dbg!(c);
-                    todo!()
+                    todo!() // if loot, return loot, if monster, return monster
                 } //monster
                 _ => {}
             }
@@ -636,12 +649,7 @@ impl Map {
             self.discovered_map[row][col] = self.map[row][col].clone();
             self.displayed_map[row][col] = self.discovered_map[row][col];
             // place monster
-            if let Some(monster) = self
-                .monsters
-                .iter()
-                .filter(|m| m.coord == (row, col))
-                .next()
-            {
+            if let Some(monster) = self.monsters.iter().find(|m| m.coord == (row, col)) {
                 let fl = monster.get_name().chars().next().unwrap();
                 self.displayed_map[monster.coord.0][monster.coord.1] = fl;
             }

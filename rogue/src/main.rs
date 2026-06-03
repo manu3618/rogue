@@ -33,8 +33,11 @@ use monster::{Monster, Player};
 #[derive(Debug, Default, Clone)]
 enum Display {
     #[default]
+    /// Map of current level
     Map,
+    /// Combat with an enemy
     Combat,
+    /// Inventory, last log messages, small help
     Inventory,
 }
 
@@ -78,7 +81,7 @@ impl App {
         let mut monsters: Vec<Monster> = (0..3).map(|_| Monster::generate()).collect();
         map.place_monsters(&mut monsters);
         Self {
-            map: map,
+            map,
             player: Rc::clone(&player),
             ..Default::default()
         }
@@ -99,11 +102,13 @@ impl App {
     fn handle_key_event(&mut self, key_event: KeyEvent) -> io::Result<()> {
         match self.display {
             Display::Map => match key_event.code {
-                KeyCode::Char(u) => self.log.push(format!("Key pressed: {u}")),
                 KeyCode::Left => self.map.move_player(map::MoveDirection::Left),
                 KeyCode::Right => self.map.move_player(map::MoveDirection::Right),
                 KeyCode::Up => self.map.move_player(map::MoveDirection::Up),
                 KeyCode::Down => self.map.move_player(map::MoveDirection::Down),
+                KeyCode::Char('q') => todo!("quit?"),
+                KeyCode::Char('?') => self.display = Display::Inventory,
+                KeyCode::Char(u) => self.log.push(format!("Key pressed: {u}")),
                 _ => {
                     dbg!(key_event);
                     todo!()
@@ -112,6 +117,14 @@ impl App {
             Display::Combat => todo!(),
             Display::Inventory => todo!(),
         }
+
+        // TODO: check map state
+        match &self.map.encounter {
+            None => {}
+            Some(map::Encounter::Monster(m)) => todo!(),
+            _ => todo!(),
+        }
+
         Ok(())
     }
 
