@@ -27,6 +27,7 @@ use std::rc::Rc;
 mod combat;
 mod map;
 mod monster;
+use combat::Combat;
 use monster::{Monster, Player};
 
 /// What to display on screen
@@ -45,6 +46,8 @@ enum Display {
 struct App {
     player: Rc<RefCell<Player>>,
     // monsters: Vec<Monster>,
+    /// Current combat, if any
+    combat: Combat,
     /// current map
     map: map::Map,
     /// curretnly generated maps
@@ -67,7 +70,7 @@ impl Widget for App {
         Line::from(self.log.last().unwrap_or(&"LOG".into()).clone()).render(chunks[0], buf);
         match self.display {
             Display::Map => self.map.render(chunks[1], buf),
-            Display::Combat => todo!(),
+            Display::Combat => self.combat.render(chunks[1], buf),
             Display::Inventory => todo!(),
         }
         Line::from("status".blue()).render(chunks[2], buf);
@@ -114,16 +117,33 @@ impl App {
                     todo!()
                 }
             },
-            Display::Combat => todo!(),
+            Display::Combat => match key_event.code {
+                KeyCode::Up => self.combat.select_previous(),
+                KeyCode::Down => self.combat.select_next(),
+                KeyCode::Left | KeyCode::Right => {}
+                KeyCode::Char(c) if ('0'..='9').contains(&c) => {
+                    self.combat.select_item(c.to_digit(10).unwrap() as usize)
+                }
+                KeyCode::Char('q') => todo!("quit?"),
+                KeyCode::Char('?') => self.display = Display::Inventory,
+                KeyCode::Char(u) => self.log.push(format!("Key pressed: {u}")),
+                _ => {
+                    dbg!(key_event);
+                    todo!()
+                }
+            },
             Display::Inventory => todo!(),
         }
 
-        // TODO: check map state
         match &self.map.encounter {
             None => {}
-            Some(map::Encounter::Monster(m)) => todo!(),
-            _ => todo!(),
+            Some(map::Encounter::Monster(m)) => {
+                self.combat = Combat::new(Rc::clone(&self.player), m.clone());
+                self.display = Display::Combat
+            }
+            Some(map::Encounter::Loot(l)) => todo!(),
         }
+        self.map.encounter = None;
 
         Ok(())
     }
@@ -146,10 +166,6 @@ fn main() -> Result<()> {
         app.map.player.borrow().coord
     ));
     app.log.push(format!("room number: {}", app.map.room_nb()));
-    app.log.push(format!(
-        "monster placement: {:?}",
-        app.map.monsters.first().unwrap().coord
-    ));
     enable_raw_mode()?;
     execute!(io::stdout(), EnterAlternateScreen)?;
     let mut terminal = Terminal::new(CrosstermBackend::new(io::stdout()))?;

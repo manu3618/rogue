@@ -2,11 +2,9 @@ use crate::Monster;
 use crate::Player;
 use itertools::iproduct;
 use rand::prelude::*;
-use std::fmt;
-// use ratatui::prelude::Stylize;
 use ratatui::{buffer::Buffer, layout::Rect, text::Text, widgets::Widget};
-// use std::borrow::BorrowMut;
 use std::cell::RefCell;
+use std::fmt;
 use std::rc::Rc;
 
 #[derive(Debug, Clone)]
@@ -205,8 +203,12 @@ fn get_trajectory_l(
     path
 }
 
-#[derive(Debug, Clone)]
-struct Loot; // TODO work on it
+// TODO: consider put loot elsewhere
+#[derive(Debug, Clone, Default)]
+pub(crate) struct Loot {
+    name: String,
+    coord: (usize, usize),
+}
 
 #[derive(Debug, Clone)]
 pub(crate) enum Encounter {
@@ -227,7 +229,9 @@ pub(crate) struct Map {
     col_nb: usize,
     pub(crate) player: Rc<RefCell<Player>>,
     rooms: Vec<Room>,
-    pub(crate) monsters: Vec<Monster>,
+    monsters: Vec<Monster>,
+    /// Objects
+    loots: Vec<Loot>,
     /// Am I encoutering something?
     pub(crate) encounter: Option<Encounter>,
 }
@@ -254,6 +258,7 @@ impl Default for Map {
         let player = Rc::new(RefCell::new(Player::default()));
         let monsters = Vec::new();
         let rooms = Vec::new();
+        let loot = Vec::new();
         Self {
             map,
             discovered_map,
@@ -263,6 +268,7 @@ impl Default for Map {
             player,
             monsters,
             rooms,
+            loots: loot,
             encounter: None,
         }
     }
@@ -617,9 +623,20 @@ impl Map {
                 Some(' ') | Some('.') => p.coord = new_coords, // empty room
                 Some('@') => {}                                // no move
                 Some(c) => {
-                    dbg!(c);
-                    todo!() // if loot, return loot, if monster, return monster
-                } //monster
+                    if let Some(m) = self
+                        .monsters
+                        .extract_if(.., |m| m.coord == new_coords)
+                        .next()
+                    {
+                        self.encounter = Some(Encounter::Monster(m))
+                    } else if let Some(l) =
+                        self.loots.extract_if(.., |l| l.coord == new_coords).next()
+                    {
+                        self.encounter = Some(Encounter::Loot(l))
+                    } else {
+                        unreachable!()
+                    }
+                }
                 _ => {}
             }
         }

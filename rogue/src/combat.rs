@@ -1,5 +1,13 @@
-use ratatui::{buffer::Buffer, layout::Rect, text::Text, widgets::Widget};
+use ratatui::{
+    buffer::Buffer,
+    layout::{Constraint, Direction, Layout, Rect},
+    text::Text,
+    widgets::Widget,
+};
 use serde::{Deserialize, Serialize};
+use std::cell::RefCell;
+use std::fmt;
+use std::rc::Rc;
 
 use crate::{Monster, Player};
 use rogue_macro::Category;
@@ -16,14 +24,38 @@ enum Action {
     Pass,
 }
 
-struct Combat {
-    player: Player,
+#[derive(Default, Debug, Clone)]
+pub(crate) struct Combat {
+    player: Rc<RefCell<Player>>,
     monster: Monster,
+    menu: Rc<RefCell<UIMenu<Action>>>,
 }
 
 impl Combat {
-    fn new(player: Player, monster: Monster) -> Self {
-        Self { player, monster }
+    pub(crate) fn new(player: Rc<RefCell<Player>>, monster: Monster) -> Self {
+        Self {
+            player,
+            monster,
+            menu: Rc::new(RefCell::new(UIMenu::new())),
+        }
+    }
+
+    pub(crate) fn select_next(&self) {
+        let menu = Rc::clone(&self.menu);
+        let mut menu = menu.borrow_mut();
+        menu.select_next();
+    }
+
+    pub(crate) fn select_previous(&self) {
+        let menu = Rc::clone(&self.menu);
+        let mut menu = menu.borrow_mut();
+        menu.select_previous();
+    }
+
+    pub(crate) fn select_item(&self, idx: usize) {
+        let menu = Rc::clone(&self.menu);
+        let mut menu = menu.borrow_mut();
+        menu.select_number(idx);
     }
 
     fn turn(&mut self) {
@@ -33,11 +65,19 @@ impl Combat {
 
 impl Widget for Combat {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        todo!()
+        let menu = Rc::clone(&self.menu);
+        let menu = menu.borrow();
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(1), Constraint::Length(menu.len() as u16)])
+            .split(area);
+        // TODO: render monster and player state
+        // TODO: display action menu
+        Text::from(format!("{}", menu)).render(chunks[1], buf);
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default, Clone)]
 struct UIMenu<T> {
     items: Vec<T>,
     menu: Vec<String>,
@@ -45,7 +85,7 @@ struct UIMenu<T> {
 }
 
 impl<T: EnumCategory + Serialize> UIMenu<T> {
-    fn new(menu_type: T) -> Self {
+    fn new() -> Self {
         let items: Vec<T> = T::categories();
         let menu: Vec<String> = items
             .iter()
@@ -62,13 +102,37 @@ impl<T: EnumCategory + Serialize> UIMenu<T> {
     }
 }
 
+impl<T> fmt::Display for UIMenu<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let content: Vec<String> = self
+            .menu
+            .iter()
+            .enumerate()
+            .map(|(idx, line)| {
+                format!(
+                    "{} {:>2}. {}",
+                    if idx == self.index { ">" } else { " " },
+                    idx,
+                    line
+                )
+            })
+            .collect();
+        let content = content.join("\n");
+        write!(f, "{content}")
+    }
+}
+
 impl<T> UIMenu<T> {
+    fn len(&self) -> usize {
+        self.items.len()
+    }
+
     fn select_next(&mut self) {
-        self.index = (self.index + 1) % self.items.len();
+        self.index = (self.index + 1) % self.len();
     }
 
     fn select_previous(&mut self) {
-        self.index = (self.index + self.items.len() - 1) % self.items.len();
+        self.index = (self.index + self.len() - 1) % self.items.len();
     }
 
     fn select_number(&mut self, idx: usize) {
@@ -86,20 +150,6 @@ impl<T> UIMenu<T> {
 
 impl<T> Widget for UIMenu<T> {
     fn render(self, area: Rect, but: &mut Buffer) {
-        let content: Vec<String> = self
-            .menu
-            .iter()
-            .enumerate()
-            .map(|(idx, line)| {
-                format!(
-                    "{} {:>2}. {}",
-                    if idx == self.index { ">" } else { " " },
-                    idx,
-                    line
-                )
-            })
-            .collect();
-        let content = content.join("\n");
-        Text::from(content).render(area, but)
+        Text::from(format!("{}\n", &self)).render(area, but)
     }
 }
