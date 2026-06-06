@@ -1,14 +1,13 @@
-use anyhow::Result;
-use ratatui::{
-    buffer::Buffer,
-    layout::{Constraint, Direction, Layout, Rect},
-    text::Text,
-    widgets::{Paragraph, Widget, Wrap},
-};
-use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fs::File;
 use std::io::BufReader;
+
+use anyhow::Result;
+use ratatui::buffer::Buffer;
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::text::Text;
+use ratatui::widgets::{Paragraph, Widget, Wrap};
+use serde::{Deserialize, Serialize};
 
 // TODO add objects "❤" "⚒" "⚕" "⚗" "⚛" "⛀" "⛁" "▢" "⮅" "⮸"
 

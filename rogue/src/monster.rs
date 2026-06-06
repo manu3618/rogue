@@ -1,8 +1,10 @@
 // use anyhow::Result;
-use crate::object::Object;
+use std::fmt;
+
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::fmt;
+
+use crate::object::Object;
 
 // TODO: add monsters "⌁" "❀" "☃" "☠" "🌢" "♘"
 

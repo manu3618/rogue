@@ -1,20 +1,19 @@
-use rand::prelude::*;
-use ratatui::{
-    buffer::Buffer,
-    layout::{Constraint, Direction, Layout, Rect},
-    prelude::Stylize,
-    text::Text,
-    widgets::{Block, Paragraph, Widget, Wrap},
-};
-use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
+
+use rand::prelude::*;
+use ratatui::buffer::Buffer;
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::prelude::Stylize;
+use ratatui::text::Text;
+use ratatui::widgets::{Block, Paragraph, Widget, Wrap};
+use rogue_macro::Category;
+use rogue_trait::EnumCategory;
+use serde::{Deserialize, Serialize};
 use tracing::{info, instrument};
 
 use crate::{Monster, Player};
-use rogue_macro::Category;
-use rogue_trait::EnumCategory;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Category)]
 enum Action {

@@ -1,12 +1,15 @@
-use crate::Monster;
-use crate::Object;
-use crate::Player;
-use itertools::iproduct;
-use rand::prelude::*;
-use ratatui::{buffer::Buffer, layout::Rect, text::Text, widgets::Widget};
 use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
+
+use itertools::iproduct;
+use rand::prelude::*;
+use ratatui::buffer::Buffer;
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::text::{Span, Text};
+use ratatui::widgets::Widget;
+
+use crate::{Monster, Object, Player};
 
 #[derive(Debug, Clone)]
 pub(crate) enum MoveDirection {
@@ -232,13 +235,27 @@ pub(crate) struct Map {
 
 impl Widget for Map {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let content: Vec<String> = self
-            .displayed_map
-            .iter()
-            .map(|line| line.iter().collect::<String>())
-            .collect();
-        let content = content.join("\n");
-        Text::from(content).render(area, buf)
+        let lines = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(1)].repeat(self.line_nb))
+            .split(area);
+        for line_idx in 0..self.line_nb {
+            let mut skip_following = false;
+            let mut line = String::new();
+            for row_idx in 0..self.col_nb {
+                let character = String::from(self.get((line_idx, row_idx)).unwrap());
+                let s = Span::raw(&character);
+                if !skip_following {
+                    line.push_str(character.as_str());
+                    if s.width() == 2 {
+                        skip_following = true;
+                    }
+                } else {
+                    skip_following = false;
+                }
+            }
+            Text::from(line).render(lines[line_idx], buf);
+        }
     }
 }
 
@@ -707,8 +724,20 @@ impl Map {
         iproduct!(line_min..=line_max, col_min..=col_max).collect()
     }
 
-    pub fn size(&self) -> (usize, usize) {
+    pub(crate) fn size(&self) -> (usize, usize) {
         (self.line_nb, self.col_nb)
+    }
+
+    /// Simple render method, useful when no character spanning over multiple
+    /// columns exists
+    fn render_monospace(self, area: Rect, buf: &mut Buffer) {
+        let content: Vec<String> = self
+            .displayed_map
+            .iter()
+            .map(|line| line.iter().collect::<String>())
+            .collect();
+        let content = content.join("\n");
+        Text::from(content).render(area, buf)
     }
 }
 

@@ -1,6 +1,6 @@
 [
     {
-        "name": "Ⓢsnake",
+        "name": "🐍snake",
         "description": "description to review",
         "min_hp": 1,
         "max_hp": 5,
@@ -11,6 +11,24 @@
     {
         "name": "☁shadow",
         "description": "Any shadow or spirit",
+        "min_hp": 10,
+        "max_hp": 25,
+        "min_strength": 1,
+        "max_strength": 2,
+        "mobile": false
+    },
+    {
+        "name": "🧟zombie",
+        "description": "Common zombie",
+        "min_hp": 10,
+        "max_hp": 25,
+        "min_strength": 1,
+        "max_strength": 2,
+        "mobile": false
+    },
+    {
+        "name": "👻ghost",
+        "description": "Common ghost",
         "min_hp": 10,
         "max_hp": 25,
         "min_strength": 1,

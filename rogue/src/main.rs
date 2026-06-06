@@ -1,3 +1,8 @@
+use std::cell::RefCell;
+use std::io;
+use std::rc::Rc;
+use std::sync::{Arc, Mutex};
+
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 use rand::prelude::*;
@@ -19,16 +24,10 @@ use ratatui::{
         Widget,
     },
 };
-use std::cell::RefCell;
-use std::io;
-use std::rc::Rc;
-use std::sync::{Arc, Mutex};
 use tracing::field::Visit;
 use tracing::{Subscriber, debug, info};
-use tracing_subscriber::{
-    Layer,
-    layer::{Context, SubscriberExt},
-};
+use tracing_subscriber::Layer;
+use tracing_subscriber::layer::{Context, SubscriberExt};
 
 mod combat;
 mod map;
