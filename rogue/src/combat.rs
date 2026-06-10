@@ -36,7 +36,7 @@ impl Combat {
         Self {
             player,
             monster,
-            menu: Rc::new(RefCell::new(UIMenu::new())),
+            menu: Rc::new(RefCell::new(UIMenu::<Action>::new())),
         }
     }
 
@@ -58,7 +58,25 @@ impl Combat {
         menu.select_number(idx);
     }
 
-    fn turn(&mut self) {
+    pub(crate) fn validate(&self) {
+        let menu = Rc::clone(&self.menu);
+        let menu = menu.borrow();
+        match menu.get_selected() {
+            Action::Magic => todo!(),
+            Action::Flee => todo!(),
+            Action::Physical => todo!(),
+            Action::Pass => {}
+        }
+    }
+
+    pub(crate) fn previous(&self) {
+        // TODO: implement navigation through menus
+    }
+
+    fn strike(&mut self) {
+        // TODO Player stike monster
+        // TODO Monster strike player
+        // TODO: check if monster/player is dead
         todo!()
     }
 }
@@ -141,7 +159,7 @@ impl<T> UIMenu<T> {
         }
     }
 
-    fn get_select(&self) -> &T {
+    fn get_selected(&self) -> &T {
         self.items
             .get(self.index)
             .expect("index should be less than item length")

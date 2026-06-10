@@ -1,4 +1,5 @@
 // use anyhow::Result;
+use crate::object::Object;
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -36,8 +37,14 @@ impl Player {
         self.coord = coord;
     }
 
-    fn fight(&mut self, monster: &Monster) {
-        todo!()
+    fn use_object(&mut self, object: Object) {
+        self.gold += object.gold;
+        self.max_hp += object.increase_max_hp;
+        self.hp = self
+            .max_hp
+            .min((self.hp as i32 + object.increase_hp) as usize);
+        self.strength = 0.max(object.increase_strength + self.strength as i32) as usize;
+        self.arm = self.arm.max(object.armor);
     }
 }
 

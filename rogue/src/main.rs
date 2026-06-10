@@ -27,8 +27,11 @@ use std::rc::Rc;
 mod combat;
 mod map;
 mod monster;
+mod object;
+
 use combat::Combat;
 use monster::{Monster, Player};
+use object::Object;
 
 /// What to display on screen
 #[derive(Debug, Default, Clone)]
@@ -120,7 +123,8 @@ impl App {
             Display::Combat => match key_event.code {
                 KeyCode::Up => self.combat.select_previous(),
                 KeyCode::Down => self.combat.select_next(),
-                KeyCode::Left | KeyCode::Right => {}
+                KeyCode::Left => self.combat.previous(),
+                KeyCode::Right | KeyCode::Enter => self.combat.validate(),
                 KeyCode::Char(c) if ('0'..='9').contains(&c) => {
                     self.combat.select_item(c.to_digit(10).unwrap() as usize)
                 }
@@ -159,6 +163,7 @@ fn main() -> Result<()> {
     let file = File::open(path)?;
     let reader = BufReader::new(file);
     let monster_collection: Vec<Monster> = serde_json::from_reader(reader)?;
+    let object_collection = Object::collection_from_file("data/objects.json")?;
     // let mut app = App::default();
     let mut app = App::new();
     app.log.push(format!(
