@@ -1,3 +1,4 @@
+use rand::prelude::*;
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Direction, Layout, Rect},
@@ -8,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
+use tracing::{info, instrument};
 
 use crate::{Monster, Player};
 use rogue_macro::Category;
@@ -15,7 +17,7 @@ use rogue_trait::EnumCategory;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Category)]
 enum Action {
-    Magic, // TODO: define spell
+    // Magic, // TODO: add magic (or not)
     /// Physical attack with current equipement
     #[default]
     Physical,
@@ -29,6 +31,8 @@ pub(crate) struct Combat {
     player: Rc<RefCell<Player>>,
     monster: Monster,
     menu: Rc<RefCell<UIMenu<Action>>>,
+    player_advantage: bool,
+    monster_advantage: bool,
 }
 
 impl Combat {
@@ -37,6 +41,8 @@ impl Combat {
             player,
             monster,
             menu: Rc::new(RefCell::new(UIMenu::<Action>::new())),
+            player_advantage: false,
+            monster_advantage: false,
         }
     }
 
@@ -58,13 +64,13 @@ impl Combat {
         menu.select_number(idx);
     }
 
-    pub(crate) fn validate(&self) {
+    pub(crate) fn validate(&mut self) {
         let menu = Rc::clone(&self.menu);
         let menu = menu.borrow();
         match menu.get_selected() {
-            Action::Magic => todo!(),
+            // Action::Magic => todo!(),
             Action::Flee => todo!(),
-            Action::Physical => todo!(),
+            Action::Physical => self.strike(),
             Action::Pass => {}
         }
     }
@@ -73,11 +79,47 @@ impl Combat {
         // TODO: implement navigation through menus
     }
 
+    #[instrument]
     fn strike(&mut self) {
-        // TODO Player stike monster
-        // TODO Monster strike player
-        // TODO: check if monster/player is dead
-        todo!()
+        let player = Rc::clone(&self.player);
+        let mut player = player.borrow_mut();
+
+        // Player stike monster
+        let proba = dice(20, self.player_advantage, self.monster_advantage);
+        let attack_success = match proba {
+            1 => false, // critical failure
+            20 => true, // critical success
+            d => player.get_strength() + d > self.monster.get_strength(),
+        };
+        if attack_success {
+            // TODO: print "player attack succeed (critical?)"
+            let damage = dice(20, false, false) + player.get_strength();
+            info!("player get {damage} damage");
+            self.monster.get_damage(damage);
+        } else {
+            info!("player attack failed");
+        }
+
+        // Monster strike player
+        let proba = dice(20, self.monster_advantage, self.player_advantage);
+        let attack_success = match proba {
+            1 => false, // critical failure
+            20 => true, // critical success
+            d => self.monster.get_strength() + d > player.get_strength(),
+        };
+        if attack_success {
+            // TODO: print "monster attack succeed (critical?)"
+            let damage = dice(20, false, false) + self.monster.get_strength();
+            let damage = if player.get_armor() > damage {
+                0
+            } else {
+                damage - player.get_armor()
+            };
+            info!("player get {damage} damage");
+            player.get_damage(damage);
+        } else {
+            info!("monster attack failed");
+        }
     }
 }
 
@@ -167,7 +209,24 @@ impl<T> UIMenu<T> {
 }
 
 impl<T> Widget for UIMenu<T> {
-    fn render(self, area: Rect, but: &mut Buffer) {
-        Text::from(format!("{}\n", &self)).render(area, but)
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        Text::from(format!("{}\n", &self)).render(area, buf)
     }
+}
+
+#[instrument]
+fn dice(d: usize, advantage: bool, disavantage: bool) -> usize {
+    let mut rng = rand::rng();
+    let res = match (advantage, disavantage) {
+        (true, false) => rng.random_range(1..=d).max(rng.random_range(1..=d)),
+        (false, true) => rng.random_range(1..=d).min(rng.random_range(1..=d)),
+        _ => rng.random_range(1..=d),
+    };
+    if res == 1 {
+        info!("critical failure");
+    }
+    if res == d {
+        info!("critical sucess");
+    }
+    d
 }

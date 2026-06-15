@@ -23,6 +23,15 @@ use std::fs::File;
 use std::io;
 use std::io::BufReader;
 use std::rc::Rc;
+use std::sync::{Arc, Mutex};
+use tracing::field::Visit;
+use tracing::{Subscriber, info};
+use tracing_subscriber::{
+    Layer, fmt,
+    layer::{Context, SubscriberExt},
+    registry::{LookupSpan, Registry},
+    util::SubscriberInitExt,
+};
 
 mod combat;
 mod map;
@@ -33,6 +42,61 @@ use combat::Combat;
 use monster::{Monster, Player};
 use object::Object;
 
+// tracing stuff
+
+#[derive(Default)]
+struct MessageVisitor {
+    message: String,
+}
+
+impl Visit for MessageVisitor {
+    fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+        if field.name() == "message" {
+            self.message = format!("{:?}", value);
+        }
+    }
+
+    fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
+        if field.name() == "message" {
+            self.message = value.to_string();
+        }
+    }
+}
+
+#[derive(Default, Debug, Clone)]
+struct MessageCapture {
+    messages: Arc<Mutex<Vec<String>>>,
+}
+
+impl MessageCapture {
+    fn new() -> Self {
+        Self {
+            ..Default::default()
+        }
+    }
+    fn get_last_message(&self) -> Option<String> {
+        self.messages.lock().unwrap().last().cloned()
+    }
+    fn push_message(&self, msg: String) {
+        self.messages.lock().unwrap().push(msg);
+    }
+}
+
+impl<S> Layer<S> for MessageCapture
+where
+    S: Subscriber,
+{
+    fn on_event(&self, event: &tracing::Event<'_>, _ctx: Context<'_, S>) {
+        let mut visitor = MessageVisitor::default();
+        let metadata = event.metadata();
+        event.record(&mut visitor);
+        let msg = visitor.message;
+        if !msg.is_empty() {
+            self.messages.lock().unwrap().push(msg);
+        }
+    }
+}
+
 /// What to display on screen
 #[derive(Debug, Default, Clone)]
 enum Display {
@@ -41,7 +105,7 @@ enum Display {
     Map,
     /// Combat with an enemy
     Combat,
-    /// Inventory, last log messages, small help
+    /// Inventory, last log messages, small help?
     Inventory,
 }
 
@@ -53,11 +117,13 @@ struct App {
     combat: Combat,
     /// current map
     map: map::Map,
-    /// curretnly generated maps
+    /// currently generated maps
     maps: Vec<map::Map>,
     display: Display,
     exit: bool,
     log: Vec<String>,
+    /// messages captured from tracing
+    captured_messages: Arc<Mutex<Vec<String>>>,
 }
 
 impl Widget for App {
@@ -76,20 +142,38 @@ impl Widget for App {
             Display::Combat => self.combat.render(chunks[1], buf),
             Display::Inventory => todo!(),
         }
-        Line::from("status".blue()).render(chunks[2], buf);
+        Line::from(vec![
+            "status: ".blue(),
+            self.player.borrow().status().into(),
+        ])
+        .render(chunks[2], buf);
     }
 }
 
 impl App {
     fn new() -> Self {
-        let player = Rc::new(RefCell::new(Default::default()));
+        let player = Rc::new(RefCell::new(Player::new()));
+        let capture = Arc::new(Mutex::new(Vec::new()));
+        let capture_layer = MessageCapture {
+            messages: Arc::clone(&capture),
+        };
+        let subscriber = tracing_subscriber::registry().with(capture_layer);
+        tracing::subscriber::set_global_default(subscriber);
         let mut map = map::Map::new(0, Rc::clone(&player));
         let mut monsters: Vec<Monster> = (0..3).map(|_| Monster::generate()).collect();
         map.place_monsters(&mut monsters);
         Self {
             map,
             player: Rc::clone(&player),
+            captured_messages: Arc::clone(&capture),
             ..Default::default()
+        }
+    }
+
+    fn update_last_message(&mut self) {
+        let last_message = self.captured_messages.lock().unwrap().last().cloned();
+        if last_message.is_some() && last_message != self.log.last().cloned() {
+            self.log.push(last_message.unwrap())
         }
     }
 
@@ -102,6 +186,7 @@ impl App {
             }
             _ => {}
         };
+        self.update_last_message();
         Ok(())
     }
 
@@ -125,7 +210,7 @@ impl App {
                 KeyCode::Down => self.combat.select_next(),
                 KeyCode::Left => self.combat.previous(),
                 KeyCode::Right | KeyCode::Enter => self.combat.validate(),
-                KeyCode::Char(c) if ('0'..='9').contains(&c) => {
+                KeyCode::Char(c) if c.is_ascii_digit() => {
                     self.combat.select_item(c.to_digit(10).unwrap() as usize)
                 }
                 KeyCode::Char('q') => todo!("quit?"),
@@ -142,6 +227,7 @@ impl App {
         match &self.map.encounter {
             None => {}
             Some(map::Encounter::Monster(m)) => {
+                info!("encountring monster {}", m);
                 self.combat = Combat::new(Rc::clone(&self.player), m.clone());
                 self.display = Display::Combat
             }

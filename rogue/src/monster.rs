@@ -2,6 +2,7 @@
 use crate::object::Object;
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 #[derive(Debug, Default, Clone)]
 pub(crate) struct Player {
@@ -22,15 +23,25 @@ pub(crate) struct Player {
 }
 
 impl Player {
-    fn status(&self) -> String {
+    pub fn new() -> Self {
+        Self {
+            hp: 10,
+            max_hp: 10,
+            strength: 10,
+            max_str: 10,
+            ..Default::default()
+        }
+    }
+
+    pub(crate) fn status(&self) -> String {
         [
-            format!("Gold:{}", self.gold),
+            format!("Gold: {}", self.gold),
             format!("Hp: {}({})", self.hp, self.max_hp),
             format!("Str: {}({})", self.strength, self.max_str),
             format!("Arm: {}", self.arm),
             format!("Exp: {}/{}", self.exp_lvl, self.exp_points),
         ]
-        .join("\t")
+        .join(" \t")
     }
 
     fn move_to(&mut self, coord: (usize, usize)) {
@@ -45,6 +56,21 @@ impl Player {
             .min((self.hp as i32 + object.increase_hp) as usize);
         self.strength = 0.max(object.increase_strength + self.strength as i32) as usize;
         self.arm = self.arm.max(object.armor);
+    }
+
+    pub(crate) fn get_strength(&self) -> usize {
+        self.strength
+    }
+
+    pub(crate) fn get_armor(&self) -> usize {
+        self.arm
+    }
+    pub(crate) fn get_damage(&mut self, damage: usize) {
+        self.hp = if self.hp > damage {
+            self.hp - damage
+        } else {
+            0
+        }
     }
 }
 
@@ -65,6 +91,12 @@ pub(crate) struct Monster {
     mobile: bool,
 }
 
+impl fmt::Display for Monster {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
 impl Monster {
     /// Generate a new monster
     pub(crate) fn generate() -> Self {
@@ -83,5 +115,16 @@ impl Monster {
     }
     pub(crate) fn get_name(&self) -> &str {
         self.name.as_str()
+    }
+    pub(crate) fn get_strength(&self) -> usize {
+        self.strength
+    }
+
+    pub(crate) fn get_damage(&mut self, damage: usize) {
+        self.hp = if damage > self.hp {
+            0
+        } else {
+            self.hp - damage
+        };
     }
 }

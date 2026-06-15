@@ -255,7 +255,7 @@ impl Default for Map {
         let map = vec![vec![' '; col_nb]; line_nb];
         let discovered_map = map.clone();
         let displayed_map = map.clone();
-        let player = Rc::new(RefCell::new(Player::default()));
+        let player = Rc::new(RefCell::new(Player::new()));
         let monsters = Vec::new();
         let rooms = Vec::new();
         let loot = Vec::new();
