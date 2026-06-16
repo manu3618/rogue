@@ -175,6 +175,16 @@ impl App {
         if last_message.is_some() && last_message != self.log.last().cloned() {
             self.log.push(last_message.unwrap())
         }
+        let last_messages = self.captured_messages.lock().unwrap();
+        let last_messages: Vec<String> = last_messages
+            .iter()
+            .rev()
+            .take(4)
+            .cloned()
+            .into_iter()
+            .rev()
+            .collect();
+        self.combat.log_messages = last_messages;
     }
 
     fn handle_events(&mut self) -> io::Result<()> {

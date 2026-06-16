@@ -1,0 +1,52 @@
+[
+    {
+        "name":"health potion",
+        "description": "refill health",
+        "increase_hp": 10,
+        "increase_max_hp":0,
+        "increase_strength": 0,
+        "armor": 0
+    },
+    {
+        "name":"strength potion",
+        "description": "increase maximal strength",
+        "increase_max_strength": 1
+    },
+    {
+        "name": "armor",
+        "description": "simple armor",
+        "armor": 8
+    },
+    {
+        "name": "gold",
+        "description": "few coins",
+        "gold": 5
+    },
+    {
+        "name": "gold",
+        "description": "some gold",
+        "gold": 10
+    },
+    {
+        "name": "gold",
+        "description": "great amount of gold",
+        "gold": 30
+    },
+    {
+        "name": "gold",
+        "description": "great amount of gold",
+        "gold": 33
+    },
+    {
+        "name": "gold",
+        "description": "great amount of gold",
+        "gold": 36
+    },
+    {
+        "name": "gold",
+        "description": "great amount of gold",
+        "gold": 40
+    }
+
+
+]

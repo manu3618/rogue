@@ -2,8 +2,9 @@ use rand::prelude::*;
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Direction, Layout, Rect},
-    text::Text,
-    widgets::Widget,
+    prelude::Stylize,
+    text::{Line, Text},
+    widgets::{Paragraph, Widget, Wrap},
 };
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
@@ -33,6 +34,7 @@ pub(crate) struct Combat {
     menu: Rc<RefCell<UIMenu<Action>>>,
     player_advantage: bool,
     monster_advantage: bool,
+    pub(crate) log_messages: Vec<String>,
 }
 
 impl Combat {
@@ -43,6 +45,7 @@ impl Combat {
             menu: Rc::new(RefCell::new(UIMenu::<Action>::new())),
             player_advantage: false,
             monster_advantage: false,
+            log_messages: Vec::new(),
         }
     }
 
@@ -127,13 +130,45 @@ impl Widget for Combat {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let menu = Rc::clone(&self.menu);
         let menu = menu.borrow();
-        let chunks = Layout::default()
+        let lines_blocks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Length(1), Constraint::Length(menu.len() as u16)])
+            .constraints([
+                Constraint::Length(1),
+                Constraint::Length(10.max(menu.len() as u16)),
+            ])
             .split(area);
-        // TODO: render monster and player state
+
+        let chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Length(20),
+                Constraint::Length(30),
+                Constraint::Length(20),
+            ])
+            .split(lines_blocks[1]);
+
+        // TODO: render monster
+        let monster = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(1), Constraint::Length(10)])
+            .split(chunks[1]);
+        Text::from(format!("{}", self.monster).red()).render(monster[0], buf);
+        Paragraph::new(Text::from(self.monster.get_description()))
+            .wrap(Wrap { trim: false })
+            .render(monster[1], buf);
+
         // TODO: display action menu
-        Text::from(format!("{}", menu)).render(chunks[1], buf);
+        Text::from(format!("{}", menu)).render(chunks[0], buf);
+
+        // TODO: display log messages
+        Text::from(
+            self.log_messages
+                .iter()
+                .map(|s| String::from(s))
+                .collect::<Vec<_>>()
+                .join("\n"),
+        )
+        .render(chunks[2], buf);
     }
 }
 

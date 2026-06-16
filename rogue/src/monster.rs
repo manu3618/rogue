@@ -78,6 +78,8 @@ impl Player {
 pub(crate) struct Monster {
     name: String,
     #[serde(default)]
+    description: String,
+    #[serde(default)]
     pub(crate) coord: (usize, usize),
     #[serde(default)]
     hp: usize,
@@ -126,5 +128,9 @@ impl Monster {
         } else {
             self.hp - damage
         };
+    }
+
+    pub(crate) fn get_description(&self) -> &str {
+        self.description.as_str()
     }
 }
