@@ -1,5 +1,6 @@
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
+use rand::prelude::*;
 // use rand::prelude::*;
 use ratatui::prelude::Stylize;
 use ratatui::{
@@ -40,7 +41,7 @@ mod object;
 
 use combat::Combat;
 use monster::{Monster, Player};
-use object::Object;
+use object::{Inventory, Object};
 
 // tracing stuff
 
@@ -119,6 +120,9 @@ struct App {
     map: map::Map,
     /// currently generated maps
     maps: Vec<map::Map>,
+    /// player inventory
+    inventory: Inventory,
+    /// select which screen to display
     display: Display,
     exit: bool,
     log: Vec<String>,
@@ -140,7 +144,7 @@ impl Widget for App {
         match self.display {
             Display::Map => self.map.render(chunks[1], buf),
             Display::Combat => self.combat.render(chunks[1], buf),
-            Display::Inventory => todo!(),
+            Display::Inventory => self.inventory.render(chunks[1], buf),
         }
         Line::from(vec![
             "status: ".blue(),
@@ -152,6 +156,7 @@ impl Widget for App {
 
 impl App {
     fn new() -> Self {
+        let mut rng = rand::rng();
         let player = Rc::new(RefCell::new(Player::new()));
         let capture = Arc::new(Mutex::new(Vec::new()));
         let capture_layer = MessageCapture {
@@ -161,10 +166,16 @@ impl App {
         tracing::subscriber::set_global_default(subscriber);
         let mut map = map::Map::new(0, Rc::clone(&player));
         let mut monsters: Vec<Monster> = (0..3).map(|_| Monster::generate()).collect();
+        let object_collection = Object::collection_from_file("data/objects.json").unwrap();
+        let mut objects: Vec<Object> = (0..3)
+            .map(|_| object_collection.choose(&mut rng).cloned().unwrap())
+            .collect();
         map.place_monsters(&mut monsters);
+        map.place_loot(&mut objects, &mut rng);
         Self {
             map,
             player: Rc::clone(&player),
+            inventory: objects.iter().collect(),
             captured_messages: Arc::clone(&capture),
             ..Default::default()
         }
@@ -201,37 +212,27 @@ impl App {
     }
 
     fn handle_key_event(&mut self, key_event: KeyEvent) -> io::Result<()> {
-        match self.display {
-            Display::Map => match key_event.code {
-                KeyCode::Left => self.map.move_player(map::MoveDirection::Left),
-                KeyCode::Right => self.map.move_player(map::MoveDirection::Right),
-                KeyCode::Up => self.map.move_player(map::MoveDirection::Up),
-                KeyCode::Down => self.map.move_player(map::MoveDirection::Down),
-                KeyCode::Char('q') => todo!("quit?"),
-                KeyCode::Char('?') => self.display = Display::Inventory,
-                KeyCode::Char(u) => self.log.push(format!("Key pressed: {u}")),
-                _ => {
-                    dbg!(key_event);
-                    todo!()
-                }
-            },
-            Display::Combat => match key_event.code {
-                KeyCode::Up => self.combat.select_previous(),
-                KeyCode::Down => self.combat.select_next(),
-                KeyCode::Left => self.combat.previous(),
-                KeyCode::Right | KeyCode::Enter => self.combat.validate(),
-                KeyCode::Char(c) if c.is_ascii_digit() => {
-                    self.combat.select_item(c.to_digit(10).unwrap() as usize)
-                }
-                KeyCode::Char('q') => todo!("quit?"),
-                KeyCode::Char('?') => self.display = Display::Inventory,
-                KeyCode::Char(u) => self.log.push(format!("Key pressed: {u}")),
-                _ => {
-                    dbg!(key_event);
-                    todo!()
-                }
-            },
-            Display::Inventory => todo!(),
+        match (&self.display, key_event.code) {
+            (Display::Map, KeyCode::Left) => self.map.move_player(map::MoveDirection::Left),
+            (Display::Map, KeyCode::Right) => self.map.move_player(map::MoveDirection::Right),
+            (Display::Map, KeyCode::Up) => self.map.move_player(map::MoveDirection::Up),
+            (Display::Map, KeyCode::Down) => self.map.move_player(map::MoveDirection::Down),
+            (Display::Combat, KeyCode::Up) => self.combat.select_previous(),
+            (Display::Combat, KeyCode::Down) => self.combat.select_next(),
+            (Display::Combat, KeyCode::Left) => self.combat.previous(),
+            (Display::Combat, KeyCode::Right | KeyCode::Enter) => self.combat.validate(),
+            (Display::Combat, KeyCode::Char(c)) if c.is_ascii_digit() => {
+                self.combat.select_item(c.to_digit(10).unwrap() as usize)
+            }
+            (Display::Inventory, KeyCode::Up) => todo!(),
+            (Display::Inventory, KeyCode::Down) => todo!(),
+            (Display::Inventory, KeyCode::Left) => todo!(),
+            (Display::Inventory, KeyCode::Right | KeyCode::Enter) => todo!(),
+            (Display::Inventory, KeyCode::Char(c)) if c.is_ascii_digit() => todo!(),
+            (_, KeyCode::Char('?')) => self.display = Display::Inventory,
+            (_, KeyCode::Char('q')) => todo!("quit?"),
+            (_, KeyCode::Char(u)) => self.log.push(format!("Key pressed: {u}")),
+            _ => unreachable!(),
         }
 
         match &self.map.encounter {

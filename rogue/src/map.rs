@@ -1,4 +1,5 @@
 use crate::Monster;
+use crate::Object;
 use crate::Player;
 use itertools::iproduct;
 use rand::prelude::*;
@@ -203,16 +204,9 @@ fn get_trajectory_l(
     path
 }
 
-// TODO: consider put loot elsewhere
-#[derive(Debug, Clone, Default)]
-pub(crate) struct Loot {
-    name: String,
-    coord: (usize, usize),
-}
-
 #[derive(Debug, Clone)]
 pub(crate) enum Encounter {
-    Loot(Loot),
+    Loot(Object),
     Monster(Monster),
 }
 
@@ -231,7 +225,7 @@ pub(crate) struct Map {
     rooms: Vec<Room>,
     monsters: Vec<Monster>,
     /// Objects
-    loots: Vec<Loot>,
+    loots: Vec<Object>,
     /// Am I encoutering something?
     pub(crate) encounter: Option<Encounter>,
 }
@@ -340,7 +334,6 @@ impl Map {
 
         // TODO: generate monsters
         // TODO: generate loot
-        map.place_loot(level_nb, &mut rng);
         // TODO: place player
         // TODO: place exits
         eprintln!("{}", &map);
@@ -594,16 +587,29 @@ impl Map {
         self.monsters = monsters.to_vec();
     }
 
-    fn place_loot(&mut self, level: u8, rng: &mut ThreadRng) {
+    /// Place objects on map
+    pub(crate) fn place_loot(&mut self, objects: &mut Vec<Object>, rng: &mut ThreadRng) {
+        let mut unusable_placements: Vec<(usize, usize)> =
+            self.monsters.iter().map(|m| m.coord).collect();
+        unusable_placements.push(self.player.borrow().coord);
         let mut placements: Vec<(usize, usize)> = Vec::new();
         // TODO: adjust number of item to pop
+        let level = 1_usize;
         while placements.len() < (20 - level).into() {
-            let mut new_placements: Vec<(usize, usize)> =
-                self.rooms.iter().map(|r| r.random_inside(rng)).collect();
+            let mut new_placements: Vec<(usize, usize)> = self
+                .rooms
+                .iter()
+                .map(|r| r.random_inside(rng))
+                .filter(|c| !unusable_placements.contains(c))
+                .collect();
             placements.append(&mut new_placements);
         }
         placements.shuffle(rng);
-        // TODO: place loot
+        for object in &mut *objects {
+            object.coord = placements.pop().expect("there should be enouh placements")
+        }
+        objects.retain(|o| o.coord != (0, 0));
+        self.loots = objects.to_vec();
     }
 
     pub(crate) fn move_player(&mut self, direction: MoveDirection) {
@@ -655,6 +661,12 @@ impl Map {
                         self.displayed_map[monster.coord.0][monster.coord.1] = fl;
                     }
                 }
+                for loot in &self.loots {
+                    if room.is_inside(loot.coord) {
+                        let fl = loot.name.chars().next().unwrap();
+                        self.displayed_map[loot.coord.0][loot.coord.1] = fl;
+                    }
+                }
             }
         }
 
@@ -669,6 +681,10 @@ impl Map {
             if let Some(monster) = self.monsters.iter().find(|m| m.coord == (row, col)) {
                 let fl = monster.get_name().chars().next().unwrap();
                 self.displayed_map[monster.coord.0][monster.coord.1] = fl;
+            }
+            if let Some(loot) = self.loots.iter().find(|m| m.coord == (row, col)) {
+                let fl = loot.name.chars().next().expect("name should not be empty");
+                self.displayed_map[loot.coord.0][loot.coord.1] = fl;
             }
         }
         self.displayed_map[new_coords.0][new_coords.1] = '@';

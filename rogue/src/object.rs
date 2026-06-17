@@ -6,13 +6,19 @@ use ratatui::{
     widgets::{Paragraph, Widget, Wrap},
 };
 use serde::{Deserialize, Serialize};
+use std::cell::RefCell;
 use std::fs::File;
 use std::io::BufReader;
+use std::rc::Rc;
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub(crate) struct Object {
     pub(crate) name: String,
     pub(crate) description: String,
+
+    #[serde(default)]
+    /// Placement on the map (if relevant)
+    pub(crate) coord: (usize, usize),
 
     #[serde(default)]
     pub(crate) gold: usize,
@@ -47,12 +53,30 @@ impl Object {
 }
 
 #[derive(Debug, Default, Clone)]
-struct ObjectMenu {
+pub(crate) struct Inventory {
     objects: Vec<Object>,
     index: usize,
 }
 
-impl ObjectMenu {
+impl FromIterator<Object> for Inventory {
+    fn from_iter<T: IntoIterator<Item = Object>>(iter: T) -> Self {
+        Self {
+            objects: iter.into_iter().collect(),
+            ..Default::default()
+        }
+    }
+}
+
+impl<'a> FromIterator<&'a Object> for Inventory {
+    fn from_iter<T: IntoIterator<Item = &'a Object>>(iter: T) -> Self {
+        Self {
+            objects: iter.into_iter().cloned().collect(),
+            ..Default::default()
+        }
+    }
+}
+
+impl Inventory {
     fn len(&self) -> usize {
         self.objects.len()
     }
@@ -117,7 +141,7 @@ impl ObjectMenu {
     }
 }
 
-impl Widget for ObjectMenu {
+impl Widget for Inventory {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
