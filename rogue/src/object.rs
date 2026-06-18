@@ -7,10 +7,13 @@ use ratatui::{
 };
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
+use std::fmt;
 use std::fs::File;
 use std::io::BufReader;
 use std::rc::Rc;
 
+// TODO add objects "❤" "⚒" "⚕" "⚗" "⚛" "⛀" "⛁" "▢" "⮅" "⮸"
+//
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub(crate) struct Object {
     pub(crate) name: String,
@@ -44,11 +47,23 @@ pub(crate) struct Object {
     pub(crate) armor: usize,
 }
 
+impl fmt::Display for Object {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
 impl Object {
     pub(crate) fn collection_from_file(filepath: &str) -> Result<Vec<Self>> {
         let file = File::open(filepath)?;
         let reader = BufReader::new(file);
         Ok(serde_json::from_reader(reader)?)
+    }
+
+    /// Whether the object should be put in inventory or not
+    /// Any object that can be consumed should be consummed and not kept
+    pub(crate) fn should_keep(&self) -> bool {
+        if self.increase_hp > 0 { true } else { false }
     }
 }
 

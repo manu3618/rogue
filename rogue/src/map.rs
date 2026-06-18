@@ -335,7 +335,7 @@ impl Map {
         // TODO: generate monsters
         // TODO: generate loot
         // TODO: place player
-        // TODO: place exits
+        // TODO: place exits (possible symbol ␧
         eprintln!("{}", &map);
         map
     }

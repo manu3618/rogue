@@ -99,7 +99,7 @@ where
 }
 
 /// What to display on screen
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Eq, PartialEq)]
 enum Display {
     #[default]
     /// Map of current level
@@ -163,7 +163,7 @@ impl App {
             messages: Arc::clone(&capture),
         };
         let subscriber = tracing_subscriber::registry().with(capture_layer);
-        tracing::subscriber::set_global_default(subscriber);
+        let _ = tracing::subscriber::set_global_default(subscriber);
         let mut map = map::Map::new(0, Rc::clone(&player));
         let mut monsters: Vec<Monster> = (0..3).map(|_| Monster::generate()).collect();
         let object_collection = Object::collection_from_file("data/objects.json").unwrap();
@@ -190,7 +190,7 @@ impl App {
         let last_messages: Vec<String> = last_messages
             .iter()
             .rev()
-            .take(4)
+            .take(15)
             .cloned()
             .into_iter()
             .rev()
@@ -203,7 +203,7 @@ impl App {
             // it's important to check that the event is a key press event as
             // crossterm also emits key release and repeat events on Windows.
             Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
-                self.handle_key_event(key_event);
+                let _ = self.handle_key_event(key_event);
             }
             _ => {}
         };
@@ -238,13 +238,33 @@ impl App {
         match &self.map.encounter {
             None => {}
             Some(map::Encounter::Monster(m)) => {
+                info!("----------------------");
                 info!("encountring monster {}", m);
                 self.combat = Combat::new(Rc::clone(&self.player), m.clone());
+                self.update_last_message();
                 self.display = Display::Combat
             }
-            Some(map::Encounter::Loot(l)) => todo!(),
+            Some(map::Encounter::Loot(l)) => {
+                info!("found a {}", l);
+                if l.should_keep() {
+                    self.inventory.add_item(l.clone());
+                } else {
+                    self.player.borrow_mut().use_object(l.clone());
+                }
+            }
         }
         self.map.encounter = None;
+
+        if self.display == Display::Combat && self.combat.is_over() {
+            info!("combat ended");
+            if self.player.borrow_mut().is_dead() {
+                info!("you're dead");
+                self.exit = true;
+            } else {
+                self.player.borrow_mut().increase_exp(1); // TODO: modulate exp gain
+                self.display = Display::Map
+            }
+        }
 
         Ok(())
     }

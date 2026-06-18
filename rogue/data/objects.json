@@ -20,33 +20,81 @@
     {
         "name": "€gold",
         "description": "few coins",
-        "gold": 5
+        "gold": 1
     },
     {
         "name": "£gold",
         "description": "some gold",
-        "gold": 10
+        "gold": 2
     },
     {
         "name": "$gold",
         "description": "great amount of gold",
-        "gold": 30
+        "gold": 4
     },
     {
         "name": "€gold",
         "description": "great amount of gold",
-        "gold": 33
+        "gold": 5
     },
     {
         "name": "£gold",
         "description": "great amount of gold",
-        "gold": 36
+        "gold": 10
+    },
+    {
+        "name": "€gold",
+        "description": "few coins",
+        "gold": 20
+    },
+    {
+        "name": "£gold",
+        "description": "some gold",
+        "gold": 40
+    },
+    {
+        "name": "$gold",
+        "description": "great amount of gold",
+        "gold": 50
+    },
+    {
+        "name": "€gold",
+        "description": "great amount of gold",
+        "gold": 12
+    },
+    {
+        "name": "£gold",
+        "description": "great amount of gold",
+        "gold": 8
+    },
+    {
+        "name": "€gold",
+        "description": "few coins",
+        "gold": 15
+    },
+    {
+        "name": "£gold",
+        "description": "some gold",
+        "gold": 18
+    },
+    {
+        "name": "$gold",
+        "description": "great amount of gold",
+        "gold": 20
+    },
+    {
+        "name": "€gold",
+        "description": "great amount of gold",
+        "gold": 25
+    },
+    {
+        "name": "£gold",
+        "description": "great amount of gold",
+        "gold": 32
     },
     {
         "name": "§gold",
         "description": "great amount of gold",
-        "gold": 40
+        "gold": 42
     }
-
-
 ]

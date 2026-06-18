@@ -4,6 +4,8 @@ use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
+// TODO: add monsters "⌁" "❀" "☃" "☠" "🌢" "♘"
+
 #[derive(Debug, Default, Clone)]
 pub(crate) struct Player {
     pub(crate) coord: (usize, usize),
@@ -18,7 +20,7 @@ pub(crate) struct Player {
     arm: usize,
     /// experience level
     exp_lvl: usize,
-    /// poinst needed to increase experience level
+    /// points needed to increase experience level
     exp_points: usize,
 }
 
@@ -39,7 +41,7 @@ impl Player {
             format!("Hp: {}({})", self.hp, self.max_hp),
             format!("Str: {}({})", self.strength, self.max_str),
             format!("Arm: {}", self.arm),
-            format!("Exp: {}/{}", self.exp_lvl, self.exp_points),
+            format!("Lvl: {}/{}", self.exp_lvl, self.exp_points),
         ]
         .join(" \t")
     }
@@ -48,7 +50,7 @@ impl Player {
         self.coord = coord;
     }
 
-    fn use_object(&mut self, object: Object) {
+    pub(crate) fn use_object(&mut self, object: Object) {
         self.gold += object.gold;
         self.max_hp += object.increase_max_hp;
         self.hp = self
@@ -65,12 +67,28 @@ impl Player {
     pub(crate) fn get_armor(&self) -> usize {
         self.arm
     }
+
     pub(crate) fn get_damage(&mut self, damage: usize) {
         self.hp = if self.hp > damage {
             self.hp - damage
         } else {
             0
         }
+    }
+
+    pub(crate) fn increase_exp(&mut self, amount: usize) {
+        if self.exp_points <= amount {
+            self.exp_points = 2_usize.pow(self.exp_lvl as u32);
+            self.exp_lvl += 1;
+            self.max_hp += self.exp_lvl;
+            self.max_str += self.exp_lvl;
+        } else {
+            self.exp_points -= amount
+        }
+    }
+
+    pub(crate) fn is_dead(&self) -> bool {
+        self.hp == 0
     }
 }
 
@@ -132,5 +150,9 @@ impl Monster {
 
     pub(crate) fn get_description(&self) -> &str {
         self.description.as_str()
+    }
+
+    pub(crate) fn is_dead(&self) -> bool {
+        self.hp == 0
     }
 }

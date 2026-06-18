@@ -4,7 +4,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     prelude::Stylize,
     text::{Line, Text},
-    widgets::{Paragraph, Widget, Wrap},
+    widgets::{Block, Paragraph, Widget, Wrap},
 };
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
@@ -34,6 +34,7 @@ pub(crate) struct Combat {
     menu: Rc<RefCell<UIMenu<Action>>>,
     player_advantage: bool,
     monster_advantage: bool,
+    round: usize,
     pub(crate) log_messages: Vec<String>,
 }
 
@@ -45,6 +46,7 @@ impl Combat {
             menu: Rc::new(RefCell::new(UIMenu::<Action>::new())),
             player_advantage: false,
             monster_advantage: false,
+            round: 0,
             log_messages: Vec::new(),
         }
     }
@@ -82,12 +84,19 @@ impl Combat {
         // TODO: implement navigation through menus
     }
 
+    pub(crate) fn is_over(&self) -> bool {
+        self.player.borrow().is_dead() || self.monster.is_dead()
+    }
+
     #[instrument]
     fn strike(&mut self) {
+        info!("beginning round {}", self.round);
+        self.round += 1;
         let player = Rc::clone(&self.player);
         let mut player = player.borrow_mut();
 
         // Player stike monster
+        info!("player attack");
         let proba = dice(20, self.player_advantage, self.monster_advantage);
         let attack_success = match proba {
             1 => false, // critical failure
@@ -95,15 +104,20 @@ impl Combat {
             d => player.get_strength() + d > self.monster.get_strength(),
         };
         if attack_success {
-            // TODO: print "player attack succeed (critical?)"
+            info!("player attack succeed");
             let damage = dice(20, false, false) + player.get_strength();
-            info!("player get {damage} damage");
+            info!("monster get {damage} damage");
             self.monster.get_damage(damage);
         } else {
             info!("player attack failed");
         }
 
+        if self.monster.is_dead() {
+            return;
+        }
+
         // Monster strike player
+        info!("monster attack");
         let proba = dice(20, self.monster_advantage, self.player_advantage);
         let attack_success = match proba {
             1 => false, // critical failure
@@ -111,7 +125,7 @@ impl Combat {
             d => self.monster.get_strength() + d > player.get_strength(),
         };
         if attack_success {
-            // TODO: print "monster attack succeed (critical?)"
+            info!("monster attack succeed");
             let damage = dice(20, false, false) + self.monster.get_strength();
             let damage = if player.get_armor() > damage {
                 0
@@ -134,7 +148,7 @@ impl Widget for Combat {
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(1),
-                Constraint::Length(10.max(menu.len() as u16)),
+                Constraint::Length((menu.len() as u16).max(self.log_messages.len() as u16 + 4)),
             ])
             .split(area);
 
@@ -143,7 +157,7 @@ impl Widget for Combat {
             .constraints([
                 Constraint::Length(20),
                 Constraint::Length(30),
-                Constraint::Length(20),
+                Constraint::Length(30),
             ])
             .split(lines_blocks[1]);
 
@@ -161,13 +175,14 @@ impl Widget for Combat {
         Text::from(format!("{}", menu)).render(chunks[0], buf);
 
         // TODO: display log messages
-        Text::from(
+        Paragraph::new(Text::from(
             self.log_messages
                 .iter()
                 .map(|s| String::from(s))
                 .collect::<Vec<_>>()
                 .join("\n"),
-        )
+        ))
+        .block(Block::bordered().title("last events"))
         .render(chunks[2], buf);
     }
 }
@@ -257,6 +272,7 @@ fn dice(d: usize, advantage: bool, disavantage: bool) -> usize {
         (false, true) => rng.random_range(1..=d).min(rng.random_range(1..=d)),
         _ => rng.random_range(1..=d),
     };
+    info!("🎲: {}", &res);
     if res == 1 {
         info!("critical failure");
     }
