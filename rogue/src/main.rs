@@ -124,6 +124,8 @@ struct App {
     inventory: Inventory,
     /// select which screen to display
     display: Display,
+    /// display used before
+    previous_display: Display,
     exit: bool,
     log: Vec<String>,
     /// messages captured from tracing
@@ -167,7 +169,7 @@ impl App {
         let mut map = map::Map::new(0, Rc::clone(&player));
         let mut monsters: Vec<Monster> = (0..3).map(|_| Monster::generate()).collect();
         let object_collection = Object::collection_from_file("data/objects.json").unwrap();
-        let mut objects: Vec<Object> = (0..3)
+        let mut objects: Vec<Object> = (0..10)
             .map(|_| object_collection.choose(&mut rng).cloned().unwrap())
             .collect();
         map.place_monsters(&mut monsters);
@@ -175,7 +177,6 @@ impl App {
         Self {
             map,
             player: Rc::clone(&player),
-            inventory: objects.iter().collect(),
             captured_messages: Arc::clone(&capture),
             ..Default::default()
         }
@@ -224,12 +225,21 @@ impl App {
             (Display::Combat, KeyCode::Char(c)) if c.is_ascii_digit() => {
                 self.combat.select_item(c.to_digit(10).unwrap() as usize)
             }
-            (Display::Inventory, KeyCode::Up) => todo!(),
-            (Display::Inventory, KeyCode::Down) => todo!(),
-            (Display::Inventory, KeyCode::Left) => todo!(),
-            (Display::Inventory, KeyCode::Right | KeyCode::Enter) => todo!(),
-            (Display::Inventory, KeyCode::Char(c)) if c.is_ascii_digit() => todo!(),
-            (_, KeyCode::Char('?')) => self.display = Display::Inventory,
+            (Display::Inventory, KeyCode::Up) => self.inventory.select_previous(),
+            (Display::Inventory, KeyCode::Down) => self.inventory.select_next(),
+            (Display::Inventory, KeyCode::Left) => self.display = self.previous_display.clone(),
+            (Display::Inventory, KeyCode::Right | KeyCode::Enter) => {
+                if let Some(obj) = self.inventory.pop_selected() {
+                    self.player.borrow_mut().use_object(obj);
+                }
+            }
+            (Display::Inventory, KeyCode::Char(c)) if c.is_ascii_digit() => self
+                .inventory
+                .select_number(String::from(c).parse().unwrap()),
+            (_, KeyCode::Char('?')) => {
+                self.previous_display = self.display.clone();
+                self.display = Display::Inventory
+            }
             (_, KeyCode::Char('q')) => todo!("quit?"),
             (_, KeyCode::Char(u)) => self.log.push(format!("Key pressed: {u}")),
             _ => unreachable!(),
@@ -242,6 +252,7 @@ impl App {
                 info!("encountring monster {}", m);
                 self.combat = Combat::new(Rc::clone(&self.player), m.clone());
                 self.update_last_message();
+                self.previous_display = self.display.clone();
                 self.display = Display::Combat
             }
             Some(map::Encounter::Loot(l)) => {
@@ -262,6 +273,7 @@ impl App {
                 self.exit = true;
             } else {
                 self.player.borrow_mut().increase_exp(1); // TODO: modulate exp gain
+                self.previous_display = self.display.clone();
                 self.display = Display::Map
             }
         }

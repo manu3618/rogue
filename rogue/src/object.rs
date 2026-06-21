@@ -100,27 +100,27 @@ impl Inventory {
         self.objects.is_empty()
     }
 
-    fn select_next(&mut self) {
+    pub(crate) fn select_next(&mut self) {
         if self.is_empty() {
             return;
         }
         self.index = (self.index + 1) % self.len();
     }
 
-    fn select_previous(&mut self) {
+    pub(crate) fn select_previous(&mut self) {
         if self.is_empty() {
             return;
         }
         self.index = (self.index + self.len() - 1) % self.objects.len();
     }
 
-    fn select_number(&mut self, idx: usize) {
+    pub(crate) fn select_number(&mut self, idx: usize) {
         if idx < self.len() {
             self.index = idx
         }
     }
 
-    fn pop_selected(&mut self) -> Option<Object> {
+    pub(crate) fn pop_selected(&mut self) -> Option<Object> {
         if self.objects.is_empty() {
             return None;
         }
