@@ -20,18 +20,14 @@ use ratatui::{
     },
 };
 use std::cell::RefCell;
-use std::fs::File;
 use std::io;
-use std::io::BufReader;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use tracing::field::Visit;
-use tracing::{Subscriber, info};
+use tracing::{Subscriber, debug, info};
 use tracing_subscriber::{
-    Layer, fmt,
+    Layer,
     layer::{Context, SubscriberExt},
-    registry::{LookupSpan, Registry},
-    util::SubscriberInitExt,
 };
 
 mod combat;
@@ -127,7 +123,6 @@ struct App {
     /// display used before
     previous_display: Display,
     exit: bool,
-    log: Vec<String>,
     /// messages captured from tracing
     captured_messages: Arc<Mutex<Vec<String>>>,
 }
@@ -142,7 +137,15 @@ impl Widget for App {
                 Constraint::Length(1),
             ])
             .split(area);
-        Line::from(self.log.last().unwrap_or(&"LOG".into()).clone()).render(chunks[0], buf);
+        Line::from(
+            self.captured_messages
+                .lock()
+                .unwrap()
+                .last()
+                .unwrap_or(&"LOG".into())
+                .clone(),
+        )
+        .render(chunks[0], buf);
         match self.display {
             Display::Map => self.map.render(chunks[1], buf),
             Display::Combat => self.combat.render(chunks[1], buf),
@@ -174,6 +177,8 @@ impl App {
             .collect();
         map.place_monsters(&mut monsters);
         map.place_loot(&mut objects, &mut rng);
+        let player_coords = player.borrow().coord;
+        map.discover_map(player_coords, player_coords);
         Self {
             map,
             player: Rc::clone(&player),
@@ -183,19 +188,9 @@ impl App {
     }
 
     fn update_last_message(&mut self) {
-        let last_message = self.captured_messages.lock().unwrap().last().cloned();
-        if last_message.is_some() && last_message != self.log.last().cloned() {
-            self.log.push(last_message.unwrap())
-        }
         let last_messages = self.captured_messages.lock().unwrap();
-        let last_messages: Vec<String> = last_messages
-            .iter()
-            .rev()
-            .take(15)
-            .cloned()
-            .into_iter()
-            .rev()
-            .collect();
+        let last_messages: Vec<String> =
+            last_messages.iter().rev().take(15).cloned().rev().collect();
         self.combat.log_messages = last_messages;
     }
 
@@ -218,16 +213,19 @@ impl App {
             (Display::Map, KeyCode::Right) => self.map.move_player(map::MoveDirection::Right),
             (Display::Map, KeyCode::Up) => self.map.move_player(map::MoveDirection::Up),
             (Display::Map, KeyCode::Down) => self.map.move_player(map::MoveDirection::Down),
+            (Display::Map, KeyCode::Backspace) => self.exit = true,
             (Display::Combat, KeyCode::Up) => self.combat.select_previous(),
             (Display::Combat, KeyCode::Down) => self.combat.select_next(),
-            (Display::Combat, KeyCode::Left) => self.combat.previous(),
+            (Display::Combat, KeyCode::Left | KeyCode::Backspace) => self.combat.previous(),
             (Display::Combat, KeyCode::Right | KeyCode::Enter) => self.combat.validate(),
             (Display::Combat, KeyCode::Char(c)) if c.is_ascii_digit() => {
                 self.combat.select_item(c.to_digit(10).unwrap() as usize)
             }
             (Display::Inventory, KeyCode::Up) => self.inventory.select_previous(),
             (Display::Inventory, KeyCode::Down) => self.inventory.select_next(),
-            (Display::Inventory, KeyCode::Left) => self.display = self.previous_display.clone(),
+            (Display::Inventory, KeyCode::Left | KeyCode::Backspace) => {
+                self.display = self.previous_display.clone()
+            }
             (Display::Inventory, KeyCode::Right | KeyCode::Enter) => {
                 if let Some(obj) = self.inventory.pop_selected() {
                     self.player.borrow_mut().use_object(obj);
@@ -240,9 +238,16 @@ impl App {
                 self.previous_display = self.display.clone();
                 self.display = Display::Inventory
             }
-            (_, KeyCode::Char('q')) => todo!("quit?"),
-            (_, KeyCode::Char(u)) => self.log.push(format!("Key pressed: {u}")),
-            _ => unreachable!(),
+            (_, KeyCode::Char('q')) => {
+                info!("quit...");
+                self.exit = true
+            }
+            (_, KeyCode::Char(u)) => debug!("Key pressed: {u}"),
+            (_, k) => {
+                debug!("Key pressed: {k}");
+                self.exit = true;
+            } // hould be unreachable
+              // _ => unreachable!(),
         }
 
         match &self.map.encounter {
@@ -256,7 +261,7 @@ impl App {
                 self.display = Display::Combat
             }
             Some(map::Encounter::Loot(l)) => {
-                info!("found a {}", l);
+                info!("found {}", l);
                 if l.should_keep() {
                     self.inventory.add_item(l.clone());
                 } else {
@@ -288,18 +293,8 @@ impl App {
 }
 
 fn main() -> Result<()> {
-    let path = "data/monsters.json";
-    let file = File::open(path)?;
-    let reader = BufReader::new(file);
-    let monster_collection: Vec<Monster> = serde_json::from_reader(reader)?;
-    let object_collection = Object::collection_from_file("data/objects.json")?;
     // let mut app = App::default();
     let mut app = App::new();
-    app.log.push(format!(
-        "Player position: {:?}",
-        app.map.player.borrow().coord
-    ));
-    app.log.push(format!("room number: {}", app.map.room_nb()));
     enable_raw_mode()?;
     execute!(io::stdout(), EnterAlternateScreen)?;
     let mut terminal = Terminal::new(CrosstermBackend::new(io::stdout()))?;
@@ -311,6 +306,9 @@ fn main() -> Result<()> {
 
     disable_raw_mode()?;
     execute!(io::stdout(), LeaveAlternateScreen)?;
+
+    println!("party summmary:");
+    println!("{}", app.captured_messages.lock().unwrap().join("\n"));
 
     Ok(())
 }

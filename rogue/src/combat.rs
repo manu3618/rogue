@@ -3,7 +3,7 @@ use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Direction, Layout, Rect},
     prelude::Stylize,
-    text::{Line, Text},
+    text::Text,
     widgets::{Block, Paragraph, Widget, Wrap},
 };
 use serde::{Deserialize, Serialize};

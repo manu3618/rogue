@@ -325,7 +325,7 @@ impl Map {
         placements.shuffle(&mut rng);
         {
             let p = Rc::clone(&player);
-            (&*p).borrow_mut().coord = placements.pop().unwrap();
+            (*p).borrow_mut().coord = placements.pop().unwrap();
         }
 
         // link rooms
@@ -595,7 +595,7 @@ impl Map {
         let mut placements: Vec<(usize, usize)> = Vec::new();
         // TODO: adjust number of item to pop
         let level = 1_usize;
-        while placements.len() < (20 - level).into() {
+        while placements.len() < (20 - level) {
             let mut new_placements: Vec<(usize, usize)> = self
                 .rooms
                 .iter()
@@ -621,7 +621,7 @@ impl Map {
             MoveDirection::Down => (curr_coords.0 + 1, curr_coords.1),
         };
         {
-            let mut p = (&*self.player).borrow_mut();
+            let mut p = (*self.player).borrow_mut();
             match self.get(new_coords) {
                 Some('|') | Some('-') => return,               // wall, do no move
                 Some('\u{00A0}') | Some('\u{202F}') => return, // wall outside a room
@@ -642,16 +642,21 @@ impl Map {
                     } else {
                         unreachable!()
                     }
+                    p.coord = new_coords
                 }
                 _ => {}
             }
         }
 
+        self.discover_map(curr_coords, new_coords);
+    }
+
+    pub(crate) fn discover_map(&mut self, curr_coords: (usize, usize), new_coords: (usize, usize)) {
         for room in &self.rooms {
             if room.is_inside(self.player.borrow().coord) && room.has_light {
                 // See all room
                 for (row, col) in room.get_all_coords() {
-                    self.discovered_map[row][col] = self.map[row][col].clone();
+                    self.discovered_map[row][col] = self.map[row][col];
                     self.displayed_map[row][col] = self.discovered_map[row][col];
                 }
 
@@ -689,7 +694,6 @@ impl Map {
         }
         self.displayed_map[new_coords.0][new_coords.1] = '@';
     }
-
     fn get(&self, coords: (usize, usize)) -> Option<char> {
         self.displayed_map.get(coords.0)?.get(coords.1).copied()
     }

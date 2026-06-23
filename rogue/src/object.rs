@@ -6,14 +6,12 @@ use ratatui::{
     widgets::{Paragraph, Widget, Wrap},
 };
 use serde::{Deserialize, Serialize};
-use std::cell::RefCell;
 use std::fmt;
 use std::fs::File;
 use std::io::BufReader;
-use std::rc::Rc;
 
 // TODO add objects "❤" "⚒" "⚕" "⚗" "⚛" "⛀" "⛁" "▢" "⮅" "⮸"
-//
+
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub(crate) struct Object {
     pub(crate) name: String,
@@ -40,7 +38,7 @@ pub(crate) struct Object {
 
     /// increase the maximal value of strength by this amount
     #[serde(default)]
-    pub(crate) increase_max_strength: i32,
+    pub(crate) increase_max_strength: usize,
 
     /// set armor the this value (if greater than current one)
     #[serde(default)]
@@ -63,7 +61,8 @@ impl Object {
     /// Whether the object should be put in inventory or not
     /// Any object that can be consumed should be consummed and not kept
     pub(crate) fn should_keep(&self) -> bool {
-        if self.increase_hp > 0 { true } else { false }
+        let keepable = [self.increase_hp > 0, self.increase_strength > 0];
+        keepable.iter().any(|&x| x)
     }
 }
 

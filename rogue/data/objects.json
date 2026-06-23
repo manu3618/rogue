@@ -13,87 +13,97 @@
         "increase_max_strength": 1
     },
     {
+        "name":"🧪💊💉strength potion",
+        "description": "refill strength",
+        "increase_strength": 10
+    },
+    {
+        "name":"💀 strength poison",
+        "description": "reduce strength",
+        "increase_strength": -2
+    },
+    {
         "name": "🫧armor",
         "description": "simple armor",
         "armor": 8
     },
     {
-        "name": "€gold",
+        "name": "€ gold",
         "description": "few coins",
         "gold": 1
     },
     {
-        "name": "£gold",
+        "name": "£ gold",
         "description": "some gold",
         "gold": 2
     },
     {
-        "name": "$gold",
+        "name": "$ gold",
         "description": "great amount of gold",
         "gold": 4
     },
     {
-        "name": "€gold",
+        "name": "€ gold",
         "description": "great amount of gold",
         "gold": 5
     },
     {
-        "name": "£gold",
+        "name": "£ gold",
         "description": "great amount of gold",
         "gold": 10
     },
     {
-        "name": "€gold",
+        "name": "€ gold",
         "description": "few coins",
         "gold": 20
     },
     {
-        "name": "£gold",
+        "name": "£ gold",
         "description": "some gold",
         "gold": 40
     },
     {
-        "name": "$gold",
+        "name": "$ gold",
         "description": "great amount of gold",
         "gold": 50
     },
     {
-        "name": "€gold",
+        "name": "€ gold",
         "description": "great amount of gold",
         "gold": 12
     },
     {
-        "name": "£gold",
+        "name": "£ gold",
         "description": "great amount of gold",
         "gold": 8
     },
     {
-        "name": "€gold",
+        "name": "€ gold",
         "description": "few coins",
         "gold": 15
     },
     {
-        "name": "£gold",
+        "name": "£ gold",
         "description": "some gold",
         "gold": 18
     },
     {
-        "name": "$gold",
+        "name": "$ gold",
         "description": "great amount of gold",
         "gold": 20
     },
     {
-        "name": "€gold",
+        "name": "€ gold",
         "description": "great amount of gold",
         "gold": 25
     },
     {
-        "name": "£gold",
+        "name": "£ gold",
         "description": "great amount of gold",
         "gold": 32
     },
     {
-        "name": "§gold",
+        "name": "§ gold",
         "description": "great amount of gold",
         "gold": 42
     }

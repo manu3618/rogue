@@ -56,7 +56,9 @@ impl Player {
         self.hp = self
             .max_hp
             .min((self.hp as i32 + object.increase_hp) as usize);
-        self.strength = 0.max(object.increase_strength + self.strength as i32) as usize;
+        self.max_str += object.increase_max_strength;
+        self.strength =
+            (0.max(object.increase_strength + self.strength as i32) as usize).min(self.max_str);
         self.arm = self.arm.max(object.armor);
     }
 
@@ -85,6 +87,11 @@ impl Player {
         } else {
             self.exp_points -= amount
         }
+    }
+
+    pub(crate) fn refill_health(&mut self) {
+        self.strength = self.max_str;
+        self.hp = self.max_hp
     }
 
     pub(crate) fn is_dead(&self) -> bool {
