@@ -208,9 +208,16 @@ fn get_trajectory_l(
 }
 
 #[derive(Debug, Clone)]
+pub(crate) enum LevelDirection {
+    Next,
+    Previous,
+}
+
+#[derive(Debug, Clone)]
 pub(crate) enum Encounter {
     Loot(Object),
     Monster(Monster),
+    Door(LevelDirection),
 }
 
 #[derive(Debug, Clone)]
@@ -229,6 +236,8 @@ pub(crate) struct Map {
     monsters: Vec<Monster>,
     /// Objects
     loots: Vec<Object>,
+    previous_level_door: Option<(usize, usize)>,
+    next_level_door: Option<(usize, usize)>,
     /// Am I encoutering something?
     pub(crate) encounter: Option<Encounter>,
 }
@@ -281,6 +290,8 @@ impl Default for Map {
             rooms,
             loots: loot,
             encounter: None,
+            next_level_door: None,
+            previous_level_door: None,
         }
     }
 }
@@ -352,7 +363,16 @@ impl Map {
         // TODO: generate monsters
         // TODO: generate loot
         // TODO: place player
-        // TODO: place exits (possible symbol ␧
+        // TODO: place exits (possible symbol ␧)
+        // XXX
+        let mut offsets = map.get_room_neighbors(player.borrow().coord.clone());
+        offsets.shuffle(&mut rng);
+        map.previous_level_door = offsets
+            .iter()
+            .filter(|c| !placements.contains(c))
+            .next()
+            .copied();
+        map.next_level_door = placements.pop(); // TODO: place doors
         eprintln!("{}", &map);
         map
     }
@@ -722,6 +742,15 @@ impl Map {
         let col_min = if coords.1 < area { 0 } else { coords.1 - area };
         let col_max = self.col_nb.min(coords.1 + area);
         iproduct!(line_min..=line_max, col_min..=col_max).collect()
+    }
+
+    /// get neighbors inside a room
+    fn get_room_neighbors(&self, coords: (usize, usize)) -> Vec<(usize, usize)> {
+        self.get_neighbors(coords)
+            .iter()
+            .filter(|&c| self.rooms.iter().any(|r| r.is_inside(*c)))
+            .copied()
+            .collect()
     }
 
     pub(crate) fn size(&self) -> (usize, usize) {

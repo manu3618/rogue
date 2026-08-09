@@ -267,6 +267,7 @@ impl App {
                     self.player.borrow_mut().use_object(l.clone());
                 }
             }
+            Some(map::Encounter::Door(_)) => todo!(),
         }
         self.map.encounter = None;
 
